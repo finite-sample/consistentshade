@@ -1,4 +1,4 @@
-## Stabilising Neural Networks via a Micro‑Bootstrap Variance Penalty
+## Stabilizing Neural Networks via a Micro‑Bootstrap Variance Penalty
 
 ## 1  Problem
 
