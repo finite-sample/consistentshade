@@ -2,13 +2,9 @@
 
 ## 1  Problem
 
-Refitting a multilayer perceptron (MLP) on a fresh bootstrap draw  
-often changes its predictions more than sampling noise alone would justify.  
-Such **re‑fit variance** undermines confidence intervals, decision thresholds and  
-fair comparisons between deployments.
+Refitting a multilayer perceptron (MLP) on a fresh bootstrap draw often changes its predictions more than sampling noise alone would justify. Such **re‑fit variance** undermines confidence intervals, decision thresholds, and fair comparisons between deployments.
 
-Goal → *learn a model whose predictions barely move if we retrain on another  
-i.i.d. sample*, while giving up as little out‑of‑sample (OOS) accuracy as possible.
+Goal → *learn a model whose predictions barely move if we retrain on another i.i.d. sample*, while giving up as little out‑of‑sample (OOS) accuracy as possible.
 
 ---
 
@@ -21,7 +17,7 @@ i.i.d. sample*, while giving up as little out‑of‑sample (OOS) accuracy as po
 | **EMA Teacher–student** (Mean Teacher) | Student matches EMA weights | Anchors SGD noise, agnostic to bootstrap |
 | **Variance‑regularised ERM / χ²‑DRO** | Penalise √Var(loss) | Losses may stay equal while predictions differ |
 
-None directly minimises *bootstrap prediction variance*.
+None directly minimizes *bootstrap prediction variance*.
 
 ---
 
