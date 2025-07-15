@@ -25,7 +25,7 @@ None directly minimizes *bootstrap prediction variance*.
 
 * **Loss augmentation**
 
-\[
+$$\[
 \mathcal{L}
   = \frac{1}{K}\sum_{k=1}^{K}\!\!
         \frac{1}{|\text{idx}^{(k)}|}\sum_{i\in\text{idx}^{(k)}}
@@ -33,10 +33,10 @@ None directly minimizes *bootstrap prediction variance*.
   + \lambda\;
         \frac{1}{B}\sum_{j=1}^{B}\!
             \operatorname{Var}_{k}\!\bigl[f_{\theta^{(k)}}(x_j)\bigr]
-\]
+\]$$
 
   * `idx^(k)`: with‑replacement resample of the mini‑batch  
-  * \(K=3\) “shadow” copies share gradients; λ=0.05 in all experiments.
+  * $\(K=3\)$ “shadow” copies share gradients; λ=0.05 in all experiments.
 
 * **Directly targets** the quantity of interest: variance of predictions across bootstrap resamples.
 
