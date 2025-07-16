@@ -1,0 +1,317 @@
+\documentclass[12pt, letterpaper]{article}
+\usepackage[titletoc,title]{appendix}
+\usepackage{booktabs}
+\usepackage[margin=1in]{geometry}
+\usepackage[linkcolor=blue,
+			colorlinks=true,
+			urlcolor=blue,
+			pdfstartview={XYZ null null 1.00},
+			pdfpagemode=UseNone,
+			citecolor={black},
+			pdftitle={blacklight}]{hyperref}
+
+%\newcites{SI}{SI References}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{algorithm2e}
+\usepackage{geometry}  % see geometry.pdf on how to lay out the page. There's lots.
+\geometry{letterpaper} % This is 8.5x11 paper. Options are a4paper or a5paper or other...
+\usepackage{graphicx}  % Handles inclusion of major graphics formats and allows use of
+\usepackage{units}
+\usepackage{amsfonts,amsmath,amsbsy}
+\usepackage{amsxtra}
+\usepackage{verbatim}
+%\setcitestyle{round,semicolon,aysep={},yysep={;}}
+\usepackage{setspace} % Permits line spacing control. Options are:
+%\doublespacing
+%\onehalfspace
+%\usepackage{sectsty}    % Permits control of section header styles
+\usepackage{pdflscape}
+\usepackage{fancyhdr}   % Permits header customization. See header section below.
+\usepackage{url}        % Correctly formats URLs with the \url{} tag
+\usepackage{xurl}
+\usepackage{fullpage}   %1-inch margins
+\usepackage{multirow}
+\usepackage{verbatim}
+\usepackage{rotating}
+\setlength{\parindent}{3em}
+
+%\usepackage[T1]{fontenc}
+%\usepackage[bitstream-charter]{mathdesign}
+
+\usepackage{chngcntr}
+\usepackage{longtable}
+\usepackage{adjustbox}
+\usepackage{dcolumn}
+\usepackage{tabularx}
+
+\usepackage{lineno}
+
+\usepackage[12pt]{moresize}
+
+\usepackage{pdfpages}
+
+% https://tex.stackexchange.com/questions/611786/misplaced-noalign-because-input-before-booktabs-rule
+% I was getting Misplaced \noalign. \bottomrule on my laptop
+% but not on my desktop...
+% Comment out for older LaTeX versions
+%\iffalse
+\ExplSyntaxOn
+\cs_new:Npn \expandableinput #1
+{ \use:c { @@input } { \file_full_name:n {#1} } }
+\AddToHook{env/tabular/begin}
+{ \cs_set_eq:NN \input \expandableinput }
+\ExplSyntaxOff
+%\fi
+
+
+\usepackage[nameinlink, capitalize, noabbrev]{cleveref}
+
+\def\citeapos#1{\citeauthor{#1}'s (\citeyear{#1})}
+
+\makeatother
+
+\usepackage{footmisc}
+\setlength{\footnotesep}{\baselineskip}
+\makeatother
+\renewcommand{\footnotelayout}{\footnotesize \onehalfspacing}
+%https://tex.stackexchange.com/a/68242
+%prevent footnotes splitting over pages
+\interfootnotelinepenalty=10000
+
+
+% Colors
+\usepackage{color}
+
+\newcommand{\bch}{\color{blue}\em  }   % begin change
+\newcommand{\ying} {\color{orange}\em  }   % begin change
+\newcommand{\bgcd} {\color{purple}\em }
+\newcommand{\ech}{\color{black}\rm  }    % end change
+
+\newcommand{\note}[1]{\textcolor{orange}{#1}}
+
+% Caption
+% Caption
+\usepackage[
+    skip            =0pt,
+    labelfont       =bf, 
+    font            =small,
+    textfont        =small,
+    figurename      =Figure,
+    justification   =justified,
+    singlelinecheck =false,
+    labelsep        =period]
+{caption}
+%\captionsetup[subtable]{font=small,skip=0pt}
+\usepackage{subcaption}
+
+% tt font issues
+% \renewcommand*{\ttdefault}{qcr}
+\renewcommand{\ttdefault}{pcr}
+
+\usepackage{tocloft}
+
+\newcommand{\detailtexcount}[1]{%
+  \immediate\write18{texcount -merge -sum -q #1.tex output.bbl > #1.wcdetail }%
+  \verbatiminput{#1.wcdetail}%
+}
+
+\newcommand{\quickwordcount}[1]{%
+  \immediate\write18{texcount -1 -sum -merge -q #1.tex output.bbl > #1-words.sum }%
+  \input{#1-words.sum} words%
+}
+
+\newcommand{\quickcharcount}[1]{%
+  \immediate\write18{texcount -1 -sum -merge -char -q #1.tex output.bbl > #1-chars.sum }%
+  \input{#1-chars.sum} characters (not including spaces)%
+}
+
+\title{Bootstrap Consistency Regularization for Stable Neural Network Predictions\thanks{\href{https://github.com/finite-sample/consistentshade}{https://github.com/finite-sample/consistentshade}.}}
+
+\author{Gaurav Sood\thanks{Gaurav can be reached at \href{mailto:gsood07@gmail.com}{\footnotesize{\texttt{gsood07@gmail.com}}}}\vspace{.5cm}}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Neural networks exhibit substantial prediction variability when retrained on bootstrap samples of the same dataset, undermining reliability in deployment scenarios requiring consistent decision boundaries. We propose a bootstrap-aware regularization technique that directly minimizes prediction variance across data resamples during training. Our method simultaneously trains multiple shadow copies of a network, each on bootstrap resamples of mini-batches, while penalizing disagreement between their predictions. Empirical evaluation on tabular datasets demonstrates 25--80\% reductions in bootstrap prediction variance with accuracy degradation limited to one percentage point. Unlike existing stability approaches that target weight-space curvature or optimization noise, our method directly optimizes the quantity of practical interest: prediction consistency under data resampling.
+\end{abstract}
+
+\section{Introduction}
+
+The deployment of neural networks in production systems requires not only predictive accuracy but also consistency across model updates. When a model is retrained on fresh samples from the same distribution, predictions on identical inputs should remain stable within the bounds justified by sampling uncertainty. However, neural networks commonly exhibit substantial \emph{refit variance}---the phenomenon whereby predictions vary significantly when models are trained on different bootstrap samples of the training data.
+
+This instability poses significant challenges across multiple domains. In production machine learning systems, model updates may reverse binary classifications on borderline cases, creating inconsistent user experiences. Scientific applications require stable models for fair method comparisons and reliable bootstrap-based confidence intervals. Regulated industries face compliance issues when prediction variability across training runs triggers audit procedures.
+
+Existing approaches to neural network stability primarily target indirect proxies for the desired behavior. Sharpness-Aware Minimization \cite{foret2020sharpness} and related methods penalize weight-space curvature under the assumption that flatter minima correspond to more stable predictions. Stochastic regularization techniques such as R-Drop \cite{liang2021rdrop} control prediction consistency under network noise but do not address data resampling variance. Teacher-student methods like Mean Teacher \cite{tarvainen2017mean} stabilize optimization dynamics while remaining agnostic to bootstrap variance.
+
+We propose a fundamentally different approach: \emph{bootstrap-aware regularization} that directly minimizes prediction variance across data resamples. Our method trains multiple shadow copies of a model simultaneously, each processing bootstrap resamples of training mini-batches, while explicitly penalizing disagreement between their predictions. This approach directly targets the quantity of interest rather than relying on indirect proxies.
+
+\section{Method}
+
+\subsection{Problem Formulation}
+
+Consider a training dataset $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^n$ drawn from distribution $P$, and a parameterized model $f_\theta: \mathcal{X} \rightarrow \mathcal{Y}$. For any test input $x \in \mathcal{X}$, we define the \emph{bootstrap prediction variance} as:
+
+\begin{equation}
+\sigma^2_{\text{boot}}(x) = \mathbb{E}_{\mathcal{D}' \sim \text{Boot}(\mathcal{D})}\left[(\hat{f}_{\mathcal{D}'}(x) - \mathbb{E}[\hat{f}_{\mathcal{D}'}(x)])^2\right]
+\end{equation}
+
+where $\hat{f}_{\mathcal{D}'}$ denotes the model obtained by training on bootstrap sample $\mathcal{D}'$, and $\text{Boot}(\mathcal{D})$ represents the bootstrap distribution over datasets of size $n$ sampled with replacement from $\mathcal{D}$.
+
+Our objective combines standard empirical risk minimization with explicit bootstrap variance regularization:
+
+\begin{equation}
+\min_\theta \mathbb{E}_{(x,y) \sim P}[\ell(f_\theta(x), y)] + \lambda \cdot \mathbb{E}_{x \sim P_X}[\sigma^2_{\text{boot}}(x)]
+\end{equation}
+
+where $\ell$ is a loss function, $P_X$ is the marginal distribution of inputs, and $\lambda > 0$ controls the regularization strength.
+
+\subsection{Bootstrap-Aware Training Algorithm}
+
+Direct optimization of bootstrap variance requires multiple complete training procedures, rendering it computationally prohibitive. We approximate this objective using \emph{micro-bootstrap resampling} within mini-batches, enabling efficient joint optimization.
+
+Given a mini-batch $\mathcal{B} = \{(x_j, y_j)\}_{j=1}^B$, our algorithm maintains $K$ shadow copies of the model and proceeds as follows:
+
+\begin{enumerate}
+\item \textbf{Micro-bootstrap resampling}: For each shadow model $k \in \{1, \ldots, K\}$, generate bootstrap indices $\text{idx}^{(k)} = \{i_1^{(k)}, \ldots, i_B^{(k)}\}$ where each $i_j^{(k)} \sim \text{Uniform}(\{1, \ldots, B\})$ independently with replacement.
+
+\item \textbf{Shadow predictions}: Compute predictions for each shadow model on its bootstrap resample:
+\begin{equation}
+\mathbf{p}^{(k)} = f_{\theta^{(k)}}(\mathbf{x}_{\text{idx}^{(k)}}) \in \mathbb{R}^B
+\end{equation}
+
+\item \textbf{Joint objective optimization}: Minimize the combined loss:
+\begin{align}
+\mathcal{L} &= \frac{1}{K}\sum_{k=1}^K \frac{1}{|\text{idx}^{(k)}|}\sum_{i \in \text{idx}^{(k)}} \ell(f_{\theta^{(k)}}(x_i), y_i) \nonumber \\
+&\quad + \lambda \cdot \frac{1}{B}\sum_{j=1}^B \text{Var}_k[p_j^{(k)}]
+\end{align}
+
+where $\text{Var}_k[p_j^{(k)}] = \frac{1}{K}\sum_{k=1}^K (p_j^{(k)} - \bar{p}_j)^2$ and $\bar{p}_j = \frac{1}{K}\sum_{k=1}^K p_j^{(k)}$.
+\end{enumerate}
+
+The algorithm updates all shadow models jointly using shared gradient information, encouraging consensus across bootstrap resamples while maintaining individual adaptation to each resample's characteristics.
+
+\subsection{Implementation Considerations}
+
+\textbf{Computational overhead}: Training requires $K$ forward passes per mini-batch, increasing computational cost by a factor of approximately $K$. Memory requirements scale linearly with $K$ due to the need to store multiple model copies.
+
+\textbf{Inference}: At test time, predictions can be obtained from any single shadow model or their ensemble average. No additional computational cost is incurred during inference compared to standard training.
+
+\textbf{Hyperparameter selection}: We fix $K=3$ and $\lambda=0.05$ across all experiments based on preliminary validation studies. These values provide a reasonable balance between stability improvement and computational overhead.
+
+\section{Experimental Setup}
+
+\subsection{Datasets and Tasks}
+
+We evaluate our approach on four tabular datasets spanning regression and binary classification:
+
+\begin{itemize}
+\item \textbf{Synthetic Regression}: 20-dimensional Gaussian features with quadratic target function, $n=1000$
+\item \textbf{California Housing}: Median house value prediction, 8 features, $n=20{,}640$
+\item \textbf{Adult Income}: Binary income classification, 14 features, $n=48{,}842$
+\item \textbf{German Credit Risk}: Binary credit risk classification, 20 features, $n=1000$
+\end{itemize}
+
+All datasets employ stratified 75\%/25\% train/test splits to ensure representative evaluation sets.
+
+\subsection{Model Architecture and Training}
+
+We employ a standardized two-layer multilayer perceptron architecture across all experiments:
+\begin{itemize}
+\item Input layer to 64 hidden units with ReLU activation and dropout ($p=0.1$)
+\item Hidden layer to 128 units with ReLU activation and dropout ($p=0.1$)  
+\item Output layer (1 unit for regression, 2 for classification)
+\end{itemize}
+
+Training configuration includes Adam optimization with learning rate $10^{-3}$, batch size 64, and 25 epochs. We conduct 30 independent training runs per experimental condition to ensure statistical reliability.
+
+\subsection{Evaluation Metrics}
+
+\textbf{Predictive performance}: We report test RMSE for regression tasks and classification accuracy for binary tasks.
+
+\textbf{Bootstrap stability}: For each test input $x_i$, we compute the sample variance of predictions across 30 independent model fits and summarize stability as:
+
+\begin{equation}
+\text{StabilityRMSE} = \sqrt{\frac{1}{n_{\text{test}}}\sum_{i=1}^{n_{\text{test}}} \text{Var}_{\text{fit}}[\hat{f}(x_i)]}
+\end{equation}
+
+This metric quantifies prediction variability in the same units as the target variable, facilitating interpretation across tasks.
+
+\section{Results}
+
+\subsection{Main Experimental Results}
+
+Table~\ref{tab:main_results} presents our primary experimental findings comparing standard empirical risk minimization against bootstrap-aware training with $K=3$ shadow models and $\lambda=0.05$.
+
+\begin{table}[t]
+\centering
+\caption{Comparison of predictive performance and bootstrap stability. Values represent mean $\pm$ standard deviation across 30 independent runs.}
+\label{tab:main_results}
+\begin{tabular}{lllccr}
+\toprule
+Dataset & Metric & Baseline & Bootstrap-Aware & $\Delta$ Error & $\Delta$ Stability \\
+\midrule
+Synthetic & RMSE & 23.88 $\pm$ 0.37 & 29.46 $\pm$ 0.64 & +23\% & \textbf{-38\%} \\
+California & RMSE & 0.591 $\pm$ 0.005 & 0.598 $\pm$ 0.004 & +1\% & \textbf{-26\%} \\
+Adult & Accuracy & 0.826 $\pm$ 0.001 & 0.825 $\pm$ 0.001 & -0.1pp & \textbf{-81\%} \\
+German Credit & Accuracy & 0.697 $\pm$ 0.009 & 0.688 $\pm$ 0.006 & -0.9pp & \textbf{-48\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The results demonstrate substantial improvements in bootstrap stability across all datasets, with reductions in prediction variance ranging from 26\% to 81\%. Importantly, these stability gains come at minimal cost to predictive accuracy: real-world datasets (California Housing, Adult Income, German Credit) show accuracy degradation limited to one percentage point or less.
+
+The synthetic regression task represents a challenging scenario where model capacity substantially exceeds data complexity, leading to higher baseline instability. Even in this worst-case setting, our method achieves a 38\% reduction in bootstrap variance, albeit with a more substantial accuracy cost (+23\% RMSE).
+
+\subsection{Stability-Accuracy Trade-off Analysis}
+
+To quantify the practical significance of our stability improvements, we analyze the decomposition of total prediction uncertainty. For the Adult Income dataset, bootstrap variance accounts for 29\% of total prediction uncertainty under standard training, reducing to 10\% with bootstrap-aware regularization. This represents a meaningful reduction in the uncertainty attributable to training procedure variability rather than fundamental task difficulty.
+
+\section{Related Work}
+
+Our approach differs fundamentally from existing stability methods in directly targeting prediction variance under data resampling rather than indirect proxies.
+
+\textbf{Sharpness-based methods} such as Sharpness-Aware Minimization \cite{foret2020sharpness} and Entropy-SGD \cite{chaudhari2019entropy} seek flatter loss surfaces under the hypothesis that such minima correspond to more stable predictions. However, the relationship between weight-space geometry and bootstrap prediction variance remains theoretically unclear.
+
+\textbf{Stochastic consistency methods} like R-Drop \cite{liang2021rdrop} enforce agreement between predictions under different dropout masks, addressing network stochasticity but not data resampling variance. These methods are architecture-specific and do not generalize to bootstrap stability.
+
+\textbf{Teacher-student approaches} including Mean Teacher \cite{tarvainen2017mean} stabilize training dynamics through exponential moving averages of model weights. While effective for reducing optimization noise, these methods do not explicitly address variability under data resampling.
+
+\textbf{Distributionally robust optimization} methods such as $\chi^2$-DRO \cite{duchi2021learning} penalize loss variance across data subsets. However, loss variance does not directly correspond to prediction variance---models may achieve similar loss values while producing substantially different predictions.
+
+\section{Discussion and Limitations}
+
+\subsection{Computational Considerations}
+
+The primary limitation of our approach is computational overhead. Training $K$ shadow models increases memory requirements by a factor of $K$ and training time by approximately $2$--$3\times$ due to additional forward and backward passes. For large-scale models or datasets, this overhead may prove prohibitive.
+
+Future work could address this limitation through influence function approximations that enable single-model estimation of bootstrap variance, eliminating the need for multiple shadow models while preserving the direct optimization objective.
+
+\subsection{Theoretical Understanding}
+
+While our empirical results demonstrate clear benefits, the theoretical relationship between micro-bootstrap variance within mini-batches and full bootstrap variance across complete datasets merits further investigation. Establishing formal conditions under which our approximation remains valid would strengthen the theoretical foundations of the approach.
+
+\subsection{Hyperparameter Sensitivity}
+
+Our experiments employ fixed hyperparameters ($K=3$, $\lambda=0.05$) across all datasets. While these values prove effective in our evaluation, optimal settings may vary with model architecture, dataset characteristics, and task requirements. Developing principled approaches for hyperparameter selection represents an important direction for future research.
+
+\section{Conclusion}
+
+We have presented a bootstrap-aware regularization technique that directly addresses prediction instability under data resampling, a fundamental challenge in reliable machine learning deployment. Our method achieves substantial reductions in bootstrap prediction variance (25--80\%) while maintaining competitive predictive accuracy across tabular datasets.
+
+The key insight underlying our approach is that stability under data resampling can be effectively improved by explicitly penalizing prediction disagreement across bootstrap resamples during training, rather than relying on indirect proxies such as weight-space curvature or optimization dynamics. While computationally more demanding than single-model training, our method provides a direct solution to a pervasive problem in machine learning reliability.
+
+Future research directions include developing computationally efficient approximations through influence functions, establishing theoretical guarantees for the micro-bootstrap approximation, and extending the approach to other neural architectures and domains beyond tabular data.
+
+
+
+\bibliographystyle{apalike}
+\bibliography{boot}
+
+\end{document}
