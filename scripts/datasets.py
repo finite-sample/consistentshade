@@ -5,7 +5,7 @@ import inspect
 import numpy as np
 import torch
 from sklearn.compose import ColumnTransformer
-from sklearn.datasets import fetch_california_housing, fetch_openml, make_regression
+from sklearn.datasets import fetch_california_housing, fetch_openml, make_regression, load_diabetes
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from torch.utils.data import TensorDataset
@@ -88,6 +88,77 @@ def prepare_german_credit():
     preproc = ColumnTransformer(
         [("num", StandardScaler(), num_cols), ("cat", _get_onehot_encoder(), cat_cols)]
     )
+    X = preproc.fit_transform(X_df).astype("float32")
+    y = y_ser.to_numpy()
+
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        X, y, test_size=0.25, random_state=1, stratify=y
+    )
+    train_ds = TensorDataset(torch.tensor(X_tr), torch.tensor(y_tr))
+    return train_ds, torch.tensor(X_te), torch.tensor(y_te), X.shape[1]
+
+
+def prepare_diabetes():
+    """Prepare Diabetes regression dataset from sklearn."""
+    diabetes = load_diabetes()
+    X = diabetes.data.astype("float32")
+    y = diabetes.target.astype("float32")
+    X = StandardScaler().fit_transform(X).astype("float32")
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, random_state=1)
+    train_ds = TensorDataset(torch.tensor(X_tr), torch.tensor(y_tr))
+    return train_ds, torch.tensor(X_te), torch.tensor(y_te), X.shape[1]
+
+
+def prepare_wine_quality():
+    """Prepare Wine Quality regression dataset from UCI (red wine)."""
+    wine = fetch_openml(data_id=287, as_frame=True)
+    X_df = wine.data
+    y_ser = wine.target.astype("float32")
+    X = X_df.values.astype("float32")
+    y = y_ser.values
+    X = StandardScaler().fit_transform(X).astype("float32")
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, random_state=1)
+    train_ds = TensorDataset(torch.tensor(X_tr), torch.tensor(y_tr))
+    return train_ds, torch.tensor(X_te), torch.tensor(y_te), X.shape[1]
+
+
+def prepare_bank_marketing():
+    """Prepare Bank Marketing classification dataset from UCI (data_id=1461)."""
+    bank = fetch_openml(data_id=1461, as_frame=True)
+    X_df = bank.data
+    y_ser = (bank.target == "2").astype("int64")
+
+    num_cols = X_df.select_dtypes("number").columns.to_list()
+    cat_cols = X_df.select_dtypes(["object", "category"]).columns.to_list()
+
+    preproc = ColumnTransformer(
+        [("num", StandardScaler(), num_cols), ("cat", _get_onehot_encoder(), cat_cols)]
+    )
+    X = preproc.fit_transform(X_df).astype("float32")
+    y = y_ser.to_numpy()
+
+    X_tr, X_te, y_tr, y_te = train_test_split(
+        X, y, test_size=0.25, random_state=1, stratify=y
+    )
+    train_ds = TensorDataset(torch.tensor(X_tr), torch.tensor(y_tr))
+    return train_ds, torch.tensor(X_te), torch.tensor(y_te), X.shape[1]
+
+
+def prepare_credit_card_default():
+    """Prepare Credit Card Default classification dataset from UCI (data_id=42477)."""
+    credit = fetch_openml(data_id=42477, as_frame=True)
+    X_df = credit.data
+    y_ser = (credit.target == "1").astype("int64")
+
+    num_cols = X_df.select_dtypes("number").columns.to_list()
+    cat_cols = X_df.select_dtypes(["object", "category"]).columns.to_list()
+
+    if cat_cols:
+        preproc = ColumnTransformer(
+            [("num", StandardScaler(), num_cols), ("cat", _get_onehot_encoder(), cat_cols)]
+        )
+    else:
+        preproc = StandardScaler()
     X = preproc.fit_transform(X_df).astype("float32")
     y = y_ser.to_numpy()
 

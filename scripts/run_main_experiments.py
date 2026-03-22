@@ -16,7 +16,11 @@ from scripts.datasets import (
     prepare_german_credit,
     prepare_synthetic_regression,
 )
-from scripts.metrics import comprehensive_stability_metrics
+from scripts.metrics import (
+    comprehensive_stability_metrics,
+    compare_methods_bootstrap,
+    cohens_d,
+)
 from scripts.trainers import (
     train_bagging_classification,
     train_bagging_regression,
@@ -25,6 +29,8 @@ from scripts.trainers import (
     train_bcr_classification,
     train_bcr_regression,
     train_ifr_classification,
+    train_ifr_kfac_classification,
+    train_ifr_kfac_regression,
     train_ifr_regression,
     train_rdrop_classification,
     train_rdrop_regression,
@@ -39,7 +45,7 @@ def run_experiment(
     dataset_name, train_ds, test_x, test_y, d_in, is_classification=False, R=30, lam=0.05
 ):
     """Run all methods on a single dataset."""
-    methods = ["Baseline", "BCR", "Weight Decay", "SAM", "R-Drop", "Bagging", "IFR"]
+    methods = ["Baseline", "BCR", "Weight Decay", "SAM", "R-Drop", "Bagging", "IFR", "IFR-KFAC"]
 
     if is_classification:
         train_fns = [
@@ -52,6 +58,7 @@ def run_experiment(
             lambda s: train_rdrop_classification(s, train_ds, test_x, test_y, d_in),
             lambda s: train_bagging_classification(s, train_ds, test_x, test_y, d_in),
             lambda s: train_ifr_classification(s, train_ds, test_x, test_y, d_in),
+            lambda s: train_ifr_kfac_classification(s, train_ds, test_x, test_y, d_in),
         ]
     else:
         train_fns = [
@@ -62,6 +69,7 @@ def run_experiment(
             lambda s: train_rdrop_regression(s, train_ds, test_x, test_y, d_in),
             lambda s: train_bagging_regression(s, train_ds, test_x, test_y, d_in),
             lambda s: train_ifr_regression(s, train_ds, test_x, test_y, d_in),
+            lambda s: train_ifr_kfac_regression(s, train_ds, test_x, test_y, d_in),
         ]
 
     results = {m: {"preds": [], "metric": []} for m in methods}
@@ -79,30 +87,36 @@ def run_experiment(
     summary_rows = []
     for method in methods:
         preds = np.stack(results[method]["preds"])
-        metrics = results[method]["metric"]
+        metrics_list = results[method]["metric"]
 
         if is_classification:
             comp_metrics = comprehensive_stability_metrics(
-                preds, is_classification=True, y_true=test_y.numpy()
+                preds, is_classification=True, y_true=test_y.numpy(), compute_ci=True
             )
             summary_rows.append(
                 {
                     "Method": method,
-                    "Avg Accuracy": np.mean(metrics),
-                    "Std Accuracy": np.std(metrics),
+                    "Avg Accuracy": np.mean(metrics_list),
+                    "Std Accuracy": np.std(metrics_list),
                     "Logit Stability": comp_metrics.get("logit_stability_rmse", np.nan),
+                    "Logit Stability SE": comp_metrics.get("logit_stability_rmse_se", np.nan),
+                    "Logit Stability CI Lower": comp_metrics.get("logit_stability_rmse_ci_lower", np.nan),
+                    "Logit Stability CI Upper": comp_metrics.get("logit_stability_rmse_ci_upper", np.nan),
                     "Prob Stability": comp_metrics.get("prob_stability_rmse", np.nan),
                     "Flip Rate": comp_metrics.get("flip_rate_mean", np.nan),
                 }
             )
         else:
-            comp_metrics = comprehensive_stability_metrics(preds, is_classification=False)
+            comp_metrics = comprehensive_stability_metrics(preds, is_classification=False, compute_ci=True)
             summary_rows.append(
                 {
                     "Method": method,
-                    "Avg RMSE": np.mean(metrics),
-                    "Std RMSE": np.std(metrics),
+                    "Avg RMSE": np.mean(metrics_list),
+                    "Std RMSE": np.std(metrics_list),
                     "Stability RMSE": comp_metrics["stability_rmse"],
+                    "Stability SE": comp_metrics.get("stability_rmse_se", np.nan),
+                    "Stability CI Lower": comp_metrics.get("stability_rmse_ci_lower", np.nan),
+                    "Stability CI Upper": comp_metrics.get("stability_rmse_ci_upper", np.nan),
                     "Std p90": comp_metrics["std_p90"],
                     "Std max": comp_metrics["std_max"],
                 }
@@ -165,7 +179,26 @@ def main():
     adult_summary.to_csv(os.path.join(TABS_DIR, "adult_results.csv"), index=False)
     credit_summary.to_csv(os.path.join(TABS_DIR, "german_results.csv"), index=False)
 
+    # Save raw predictions for post-hoc analysis
+    RAW_DIR = os.path.join(TABS_DIR, "raw_predictions")
+    os.makedirs(RAW_DIR, exist_ok=True)
+
+    def save_raw_preds(results_dict, dataset_name):
+        """Save raw predictions as npz file."""
+        arrays = {}
+        for method, data in results_dict.items():
+            key = method.replace(" ", "_").replace("-", "_").lower()
+            arrays[f"{key}_preds"] = np.stack(data["preds"])
+            arrays[f"{key}_metrics"] = np.array(data["metric"])
+        np.savez(os.path.join(RAW_DIR, f"{dataset_name}_raw.npz"), **arrays)
+
+    save_raw_preds(syn_results, "synthetic")
+    save_raw_preds(cal_results, "california")
+    save_raw_preds(adult_results, "adult")
+    save_raw_preds(credit_results, "german")
+
     print(f"\nResults saved to {TABS_DIR}/")
+    print(f"Raw predictions saved to {RAW_DIR}/")
 
 
 if __name__ == "__main__":

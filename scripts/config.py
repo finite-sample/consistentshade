@@ -46,6 +46,14 @@ IFR_CONFIG = {
     "fisher_init": 1e-2,
 }
 
+IFR_KFAC_CONFIG = {
+    "lam": 0.1,
+    "kfac_ema": 0.95,
+    "kfac_damping": 1e-2,
+    "n_jacobian_samples": 16,
+    "warmup_epochs": 3,
+}
+
 EXPERIMENT_CONFIG = {
     "n_replicates": 30,
     "base_seed": 12345,

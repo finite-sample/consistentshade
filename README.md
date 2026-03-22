@@ -1,104 +1,143 @@
-## Stabilizing Neural Networks via a Micro‑Bootstrap Variance Penalty
+# Bootstrap-Consistency Regularization (BCR)
 
-## 1  Problem
+**Train neural networks that give stable predictions when retrained on different data samples.**
 
-Refitting a multilayer perceptron (MLP) on a fresh bootstrap draw often changes its predictions more than sampling noise alone would justify. Such **re‑fit variance** undermines confidence intervals, decision thresholds, and fair comparisons between deployments.
+When you retrain a neural network on a new bootstrap sample, predictions can change more than you'd expect. BCR directly penalizes this instability during training, reducing prediction variance by 22-50% with minimal accuracy loss.
 
-Goal → *learn a model whose predictions barely move if we retrain on another i.i.d. sample*, while giving up as little out‑of‑sample (OOS) accuracy as possible.
+## Installation
 
----
+```bash
+git clone https://github.com/finite-sample/consistentshade.git
+cd consistentshade
+pip install -r requirements.txt
+```
 
-## 2  Related work
+**Requirements:** Python 3.8+, PyTorch, scikit-learn, pandas, numpy
 
-| Family | Key idea | Gap for stability |
-|--------|----------|-------------------|
-| **Sharpness‑Aware** (SAM, Entropy‑SGD) | Penalise weight‑space curvature | Targets *weight* sensitivity, not data resample variance |
-| **Stochastic‑network consistency** (R‑Drop) | Two dropout masks, KL(logits) | Controls network noise only |
-| **EMA Teacher–student** (Mean Teacher) | Student matches EMA weights | Anchors SGD noise, agnostic to bootstrap |
-| **Variance‑regularised ERM / χ²‑DRO** | Penalise √Var(loss) | Losses may stay equal while predictions differ |
+## Quick Start
 
-None directly minimizes *bootstrap prediction variance*.
+```python
+import torch
+from scripts.trainers import train_bcr_regression, train_bcr_classification
 
----
+# For regression
+predictions, rmse = train_bcr_regression(
+    seed=42,
+    train_ds=your_train_dataset,  # TensorDataset
+    test_x=test_features,          # torch.Tensor
+    test_y=test_targets,           # torch.Tensor
+    d_in=n_features,
+    K=3,      # number of shadow models
+    lam=0.05, # variance penalty strength
+)
 
-## 3  Our contribution
+# For classification
+predictions, accuracy = train_bcr_classification(
+    seed=42,
+    train_ds=your_train_dataset,
+    test_x=test_features,
+    test_y=test_labels,
+    d_in=n_features,
+    K=3,
+    lam=0.05,
+)
+```
 
-* **Loss augmentation**
+## Running Experiments
 
-$$\[
-\mathcal{L}
-  = \frac{1}{K}\sum_{k=1}^{K}\!\!
-        \frac{1}{|\text{idx}^{(k)}|}\sum_{i\in\text{idx}^{(k)}}
-               \ell\!\bigl(f_{\theta^{(k)}}(x_i),\,y_i\bigr)
-  + \lambda\;
-        \frac{1}{B}\sum_{j=1}^{B}\!
-            \operatorname{Var}_{k}\!\bigl[f_{\theta^{(k)}}(x_j)\bigr]
-\]$$
+### Main experiments (4 datasets, 8 methods, 30 replicates each)
+```bash
+python scripts/run_main_experiments.py
+```
 
-  * `idx^(k)`: with‑replacement resample of the mini‑batch  
-  * $\(K=3\)$ “shadow” copies share gradients; λ=0.05 in all experiments.
+Results saved to `tabs/` with bootstrap standard errors.
 
-* **Directly targets** the quantity of interest: variance of predictions across bootstrap resamples.
+### Hyperparameter sensitivity analysis
+```bash
+python scripts/run_sensitivity.py
+```
 
-* **Cheap**: 2–3× forward/backward time; zero extra cost at inference (we average copies only for evaluation).
+Sweeps over K, batch size, learning rate, and hidden dimensions.
 
----
+### Statistical analysis with significance tests
+```bash
+python scripts/statistical_analysis.py
+```
 
-## 4  Experimental setup
+Computes bootstrap CIs, pairwise p-values, and Cohen's d effect sizes.
 
-| Component | Choice |
-|-----------|--------|
-| Datasets | Synthetic 20‑dim regression · California Housing · Adult Income · German Credit |
-| Splits | 75 % train / 25 % test (stratified for classification) |
-| Architecture | 2‑layer Dropout MLP (64–128 units) |
-| Baseline | Standard ERM with dropout |
-| Proposed | + variance penalty, \(K=3\), λ = 0.05 |
-| Metrics | Test RMSE / Accuracy · **StabilityRMSE** = √(mean Var\(_{\text{fit}}\)[pred]) |
+### Generate LaTeX tables for paper
+```bash
+python scripts/generate_tables.py
+```
 
-30 independent fits per condition.
+## Key Parameters
 
----
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `K` | 3 | Number of shadow models (more = better approximation, more memory) |
+| `lam` | 0.05 | Variance penalty strength (higher = more stable, may reduce accuracy) |
+| `bs` | 64 | Batch size |
+| `lr` | 1e-3 | Learning rate |
+| `hid` | 64 | Hidden layer dimension |
 
-## 5  Results
+## Results Summary
 
-| Dataset | Metric | Baseline | k = 3 (λ=.05) | Δ Error | Δ Stability |
-|---------|--------|----------|---------------|---------|-------------|
-| Synthetic | RMSE | **23.99** ± 0.36 | 24.91 ± 0.30 | ↑ 4 % | **–34 %** |
-| California | RMSE | **0.562** ± 0.004 | 0.570 ± 0.003 | ↑ 1 % | **–24 %** |
-| Adult | Acc | **0.826** ± .001 | 0.826 ± .001 | 0 pp | **–32 %** |
-| Credit | Acc | **0.696** ± .007 | 0.687 ± .004 | –0.9 pp | **–47 %** |
+| Dataset | Stability Reduction | Accuracy Change |
+|---------|--------------------:|----------------:|
+| German Credit | **50%** | -0.9 pp |
+| Adult Income | **32%** | < 0.1 pp |
+| California Housing | **24%** | +1.5% RMSE |
+| Synthetic | **34%** | +4% RMSE |
 
-> *StabilityRMSE* is expressed in the same units as the prediction  
-> (log‑odds for classification), so lower is better.
+BCR outperforms baselines (SAM, R-Drop, weight decay) on classification tasks. For some regression tasks, standard bagging may be equally effective.
 
----
+## How It Works
 
-## 6  Interpretation
+1. **Shadow models**: Train K copies of your network simultaneously
+2. **Poisson weighting**: Each copy sees different bootstrap weights on the same mini-batch
+3. **Variance penalty**: Penalize disagreement between shadow models on identical inputs
+4. **Joint optimization**: All models trained together, sharing the variance penalty gradient
 
-* Real-world datasets show **24–47 % reduction** in bootstrap drift for ≤ 1 pp accuracy loss.
-* Synthetic toy shows a modest cost (+4 % RMSE) for a 34% stability improvement.
-* Stability improvements are consistent across regression and classification tasks.
+```
+Loss = (1/K) * sum(weighted_loss_k) + lambda * variance_penalty
+```
 
----
+At inference, use any single model or average predictions.
 
-## 7  Positioning vs. baselines
+## Project Structure
 
-| Criterion | SAM | R‑Drop | χ²‑DRO | **Ours** |
-|-----------|-----|--------|--------|----------|
-| Direct data‑resample target | ✗ | ✗ | ✗ | ✓ |
-| Regression & classification | ✓ | ✗ | ✓ | ✓ |
-| Extra train memory | ✓ | ✓ | ✓ | ✗ (*K* copies) |
-| No extra inference cost | ✓ | ✓ | ✓ | ✓ |
+```
+consistentshade/
+├── scripts/
+│   ├── trainers/          # Training functions for all methods
+│   │   ├── bcr.py         # Bootstrap-Consistency Regularization
+│   │   ├── baseline.py    # Standard ERM
+│   │   ├── sam.py         # Sharpness-Aware Minimization
+│   │   └── ...
+│   ├── datasets.py        # Dataset preparation
+│   ├── metrics.py         # Stability metrics with bootstrap CIs
+│   ├── run_main_experiments.py
+│   ├── run_sensitivity.py
+│   └── statistical_analysis.py
+├── tabs/                  # Results (CSV + LaTeX)
+├── figs/                  # Figures
+└── ms/                    # Manuscript (LaTeX)
+```
 
----
+## Citation
 
-## 8  Future work
+Click "Cite this repository" on GitHub or use:
 
-* Influence‑function variance estimates → single‑model penalty (no memory hit).  
-* Hybrid with EMA Teacher: control both data and optimiser noise.  
-* Downstream effect on policy regret and fairness audits.
+```bibtex
+@software{sood2024bcr,
+  title={Bootstrap-Consistency Regularization},
+  author={Sood, Gaurav},
+  year={2024},
+  url={https://github.com/finite-sample/consistentshade}
+}
+```
 
----
+## License
 
-**TL;DR** A micro‑bootstrap variance penalty is a drop‑in, architecture‑agnostic technique that halves prediction instability with minimal accuracy loss on common tabular tasks.
-
+MIT
