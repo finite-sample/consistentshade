@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
-title: "Bootstrap-Consistency Regularization"
-abstract: "Train neural networks that give stable predictions when retrained on different data samples."
+title: "Bootstrap-Consistency Regularization: Training Neural Networks for Prediction Stability"
+abstract: "A training procedure that directly minimizes prediction variance across data resamples by training multiple shadow models with Poisson-weighted losses and penalizing their disagreement on identical inputs."
 authors:
   - family-names: "Sood"
     given-names: "Gaurav"
@@ -14,8 +14,9 @@ keywords:
   - machine learning
   - neural networks
   - bootstrap
-  - stability
+  - prediction stability
   - regularization
-  - prediction variance
+  - refit variance
+  - tabular data
 version: "1.0.0"
-date-released: "2024-01-01"
+date-released: "2026-03-22"

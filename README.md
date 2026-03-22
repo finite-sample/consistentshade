@@ -1,6 +1,6 @@
-# Bootstrap-Consistency Regularization (BCR)
+# Bootstrap-Consistency Regularization
 
-**Train neural networks that give stable predictions when retrained on different data samples.**
+**Training Neural Networks for Prediction Stability**
 
 When you retrain a neural network on a new bootstrap sample, predictions can change more than you'd expect. BCR directly penalizes this instability during training, reducing prediction variance by 22-50% with minimal accuracy loss.
 
@@ -130,10 +130,10 @@ consistentshade/
 Click "Cite this repository" on GitHub or use:
 
 ```bibtex
-@software{sood2024bcr,
-  title={Bootstrap-Consistency Regularization},
+@software{sood2026bcr,
+  title={Bootstrap-Consistency Regularization: Training Neural Networks for Prediction Stability},
   author={Sood, Gaurav},
-  year={2024},
+  year={2026},
   url={https://github.com/finite-sample/consistentshade}
 }
 ```
