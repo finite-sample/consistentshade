@@ -206,3 +206,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .DS_Store
+ms/boot.bbl
+ms/boot.blg
+ms/boot.out
+ms/boot.aux
+tabs/main_results.tex

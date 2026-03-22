@@ -1,0 +1,12 @@
+\begin{tabular}{lcccccc}
+\toprule
+Dataset & \multicolumn{2}{c}{RMSE} & \multicolumn{2}{c}{Stability} & \multicolumn{2}{c}{$\Delta$\%} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+ & Baseline & BCR & Baseline & BCR & BCR & IFR \\
+\midrule
+low_n_high_p & 133.86 & 134.90 & 1.58 & 0.53 & -66.7 & 2.0 \\
+correlated_features & 4.97 & 5.00 & 0.34 & 0.25 & -27.1 & 1.0 \\
+label_noise & 210.83 & 210.78 & 7.83 & 7.30 & -6.7 & 0.7 \\
+overcapacity & 256.68 & 257.04 & 0.55 & 0.24 & -56.4 & 0.5 \\
+\bottomrule
+\end{tabular}

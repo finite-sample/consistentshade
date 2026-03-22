@@ -14,12 +14,9 @@
 \usepackage{natbib}
 \usepackage{booktabs}
 \usepackage{float}
-\usepackage{placeins}
-\usepackage{algorithm2e}
 \usepackage{geometry}  % see geometry.pdf on how to lay out the page. There's lots.
 \geometry{letterpaper} % This is 8.5x11 paper. Options are a4paper or a5paper or other...
 \usepackage{graphicx}  % Handles inclusion of major graphics formats and allows use of
-\usepackage{units}
 \usepackage{amsfonts,amsmath,amsbsy}
 \usepackage{amsxtra}
 \usepackage{verbatim}
@@ -31,7 +28,6 @@
 \usepackage{pdflscape}
 \usepackage{fancyhdr}   % Permits header customization. See header section below.
 \usepackage{url}        % Correctly formats URLs with the \url{} tag
-\usepackage{xurl}
 \usepackage{fullpage}   %1-inch margins
 \usepackage{multirow}
 \usepackage{verbatim}
@@ -47,11 +43,8 @@
 \usepackage{dcolumn}
 \usepackage{tabularx}
 
-\usepackage{lineno}
 
-\usepackage[12pt]{moresize}
 
-\usepackage{pdfpages}
 
 % https://tex.stackexchange.com/questions/611786/misplaced-noalign-because-input-before-booktabs-rule
 % I was getting Misplaced \noalign. \bottomrule on my laptop
@@ -111,7 +104,6 @@
 % \renewcommand*{\ttdefault}{qcr}
 \renewcommand{\ttdefault}{pcr}
 
-\usepackage{tocloft}
 
 \newcommand{\detailtexcount}[1]{%
   \immediate\write18{texcount -merge -sum -q #1.tex output.bbl > #1.wcdetail }%
@@ -128,7 +120,7 @@
   \input{#1-chars.sum} characters (not including spaces)%
 }
 
-\title{Bootstrap Consistency Regularization for Stable Neural Network Predictions\thanks{\href{https://github.com/finite-sample/consistentshade}{https://github.com/finite-sample/consistentshade}.}}
+\title{Bootstrap-Consistency Regularization: Training Neural Networks for Prediction Stability\thanks{\href{https://github.com/finite-sample/consistentshade}{https://github.com/finite-sample/consistentshade}.}}
 
 \author{Gaurav Sood\thanks{Gaurav can be reached at \href{mailto:gsood07@gmail.com}{\footnotesize{\texttt{gsood07@gmail.com}}}}\vspace{.5cm}}
 
@@ -139,18 +131,25 @@
 \maketitle
 
 \begin{abstract}
-Neural networks exhibit substantial prediction variability when retrained on bootstrap samples of the same dataset, undermining reliability in deployment scenarios requiring consistent decision boundaries. We propose a bootstrap-aware regularization technique that directly minimizes prediction variance across data resamples during training. Our method simultaneously trains multiple shadow copies of a network, each on bootstrap resamples of mini-batches, while penalizing disagreement between their predictions. Empirical evaluation on tabular datasets demonstrates 25--80\% reductions in bootstrap prediction variance with accuracy degradation limited to one percentage point. Unlike existing stability approaches that target weight-space curvature or optimization noise, our method directly optimizes the quantity of practical interest: prediction consistency under data resampling.
+Neural networks exhibit substantial prediction variability when retrained on bootstrap samples of the same dataset, undermining reliability in deployment scenarios requiring consistent decision boundaries. We propose \emph{bootstrap-consistency regularization} (BCR), a training procedure that directly minimizes prediction variance across data resamples. Our method trains multiple shadow copies of a network simultaneously, each receiving Poisson-weighted losses that simulate bootstrap resampling, while penalizing disagreement between their predictions on identical inputs. We provide a first-order sensitivity analysis showing that bootstrap prediction variance depends on the gradient-Hessian-gradient product, which our variance penalty directly targets. Empirical evaluation on four tabular datasets demonstrates 24--47\% reductions in bootstrap prediction variance compared to standard training, with accuracy degradation typically under one percentage point. BCR provides competitive performance against natural baselines including weight decay, Sharpness-Aware Minimization, R-Drop, and standard bagging, though the relative effectiveness varies by dataset and metric. Unlike existing approaches that target indirect proxies such as weight-space curvature, BCR directly optimizes the quantity of practical interest: prediction consistency under data resampling.
 \end{abstract}
 
 \section{Introduction}
 
-The deployment of neural networks in production systems requires not only predictive accuracy but also consistency across model updates. When a model is retrained on fresh samples from the same distribution, predictions on identical inputs should remain stable within the bounds justified by sampling uncertainty. However, neural networks commonly exhibit substantial \emph{refit variance}---the phenomenon whereby predictions vary significantly when models are trained on different bootstrap samples of the training data.
+The deployment of neural networks in production systems requires not only predictive accuracy but also consistency across model updates. When a model is retrained on fresh samples from the same distribution, predictions on identical inputs should remain stable within the bounds justified by sampling uncertainty. However, neural networks commonly exhibit substantial \emph{refit variance}---the phenomenon whereby predictions vary significantly when models are trained on different bootstrap samples of the training data \citep{efron1979bootstrap}.
 
 This instability poses significant challenges across multiple domains. In production machine learning systems, model updates may reverse binary classifications on borderline cases, creating inconsistent user experiences. Scientific applications require stable models for fair method comparisons and reliable bootstrap-based confidence intervals. Regulated industries face compliance issues when prediction variability across training runs triggers audit procedures.
 
-Existing approaches to neural network stability primarily target indirect proxies for the desired behavior. Sharpness-Aware Minimization \cite{foret2020sharpness} and related methods penalize weight-space curvature under the assumption that flatter minima correspond to more stable predictions. Stochastic regularization techniques such as R-Drop \cite{liang2021rdrop} control prediction consistency under network noise but do not address data resampling variance. Teacher-student methods like Mean Teacher \cite{tarvainen2017mean} stabilize optimization dynamics while remaining agnostic to bootstrap variance.
+Existing approaches to neural network stability primarily target indirect proxies for the desired behavior. Sharpness-Aware Minimization \cite{foret2020sharpness} and related methods penalize weight-space curvature under the assumption that flatter minima correspond to more stable predictions. Stochastic regularization techniques such as R-Drop \cite{liang2021rdrop} control prediction consistency under network noise but do not address data resampling variance. Teacher-student methods like Mean Teacher \cite{tarvainen2017mean} stabilize optimization dynamics while remaining agnostic to bootstrap variance. Standard bagging \citep{breiman1996bagging} reduces variance through ensembling but does not encourage individual models to be stable.
 
-We propose a fundamentally different approach: \emph{bootstrap-aware regularization} that directly minimizes prediction variance across data resamples. Our method trains multiple shadow copies of a model simultaneously, each processing bootstrap resamples of training mini-batches, while explicitly penalizing disagreement between their predictions. This approach directly targets the quantity of interest rather than relying on indirect proxies.
+We propose \emph{bootstrap-consistency regularization} (BCR), a fundamentally different approach that directly minimizes prediction variance across data resamples. Our key contributions are:
+\begin{enumerate}
+    \item \textbf{Estimand}: We clearly define bootstrap prediction instability as the target quantity of interest---the variance of predictions across models trained on bootstrap resamples of the data.
+    \item \textbf{Training objective}: We augment the standard empirical risk with an explicit instability penalty, creating a principled trade-off between accuracy and stability.
+    \item \textbf{Algorithm}: We introduce a tractable stochastic surrogate that approximates full-retraining instability through mini-batch Poisson weighting, enabling efficient joint optimization.
+    \item \textbf{Theory}: We provide first-order sensitivity analysis showing that bootstrap variance depends on gradient sensitivity through the loss Hessian, justifying why direct variance penalties target the right quantity.
+    \item \textbf{Empirics}: We demonstrate that BCR reduces actual full-retraining instability by 24--47\% across four datasets, with competitive performance relative to natural baselines on the stability-accuracy Pareto frontier.
+\end{enumerate}
 
 \section{Method}
 
@@ -172,30 +171,62 @@ Our objective combines standard empirical risk minimization with explicit bootst
 
 where $\ell$ is a loss function, $P_X$ is the marginal distribution of inputs, and $\lambda > 0$ controls the regularization strength.
 
-\subsection{Bootstrap-Aware Training Algorithm}
+\subsection{First-Order Sensitivity Analysis}
 
-Direct optimization of bootstrap variance requires multiple complete training procedures, rendering it computationally prohibitive. We approximate this objective using \emph{micro-bootstrap resampling} within mini-batches, enabling efficient joint optimization.
+To understand what drives bootstrap prediction variance, we analyze the sensitivity of predictions to training data perturbations. Following the influence function framework \citep{koh2017understanding}, consider an infinitesimal upweighting of training point $(x_i, y_i)$ by $\epsilon$. The change in optimal parameters is:
+
+\begin{equation}
+\frac{d\theta^*}{d\epsilon_i} = -H^{-1} \nabla_\theta \ell(f_\theta(x_i), y_i)
+\end{equation}
+
+where $H = \nabla^2_\theta \mathcal{L}(\theta^*)$ is the Hessian of the training loss. The corresponding change in prediction at test point $x$ is:
+
+\begin{equation}
+\frac{df_\theta(x)}{d\epsilon_i} = \nabla_\theta f_\theta(x)^\top H^{-1} \nabla_\theta \ell(f_\theta(x_i), y_i)
+\end{equation}
+
+Bootstrap resampling induces random weights $w_i \sim \text{Multinomial}(n, 1/n)$ on training points. To first order, the bootstrap variance of predictions is:
+
+\begin{equation}
+\sigma^2_{\text{boot}}(x) \approx \nabla_\theta f_\theta(x)^\top H^{-1} \Sigma_g H^{-1} \nabla_\theta f_\theta(x)
+\label{eq:sensitivity}
+\end{equation}
+
+where $\Sigma_g = \frac{1}{n}\sum_{i=1}^n g_i g_i^\top$ is the gradient covariance and $g_i = \nabla_\theta \ell(f_\theta(x_i), y_i)$.
+
+Equation~\eqref{eq:sensitivity} reveals that prediction instability depends on three factors: (1) the sensitivity of predictions to parameters $\nabla_\theta f_\theta(x)$, (2) the curvature of the loss landscape $H^{-1}$, and (3) the variability of per-sample gradients $\Sigma_g$. Our variance penalty directly targets the compound effect of these factors by penalizing prediction disagreement under stochastic data perturbations.
+
+\subsection{Bootstrap-Consistency Training Algorithm}
+
+Direct optimization of bootstrap variance requires multiple complete training procedures, rendering it computationally prohibitive. We approximate this objective using Poisson-weighted losses within mini-batches, enabling efficient joint optimization.
 
 Given a mini-batch $\mathcal{B} = \{(x_j, y_j)\}_{j=1}^B$, our algorithm maintains $K$ shadow copies of the model and proceeds as follows:
 
 \begin{enumerate}
-\item \textbf{Micro-bootstrap resampling}: For each shadow model $k \in \{1, \ldots, K\}$, generate bootstrap indices $\text{idx}^{(k)} = \{i_1^{(k)}, \ldots, i_B^{(k)}\}$ where each $i_j^{(k)} \sim \text{Uniform}(\{1, \ldots, B\})$ independently with replacement.
-
-\item \textbf{Shadow predictions}: Compute predictions for each shadow model on its bootstrap resample:
+\item \textbf{Shared-input forward pass}: All $K$ shadow models compute predictions on the \emph{same} mini-batch inputs:
 \begin{equation}
-\mathbf{p}^{(k)} = f_{\theta^{(k)}}(\mathbf{x}_{\text{idx}^{(k)}}) \in \mathbb{R}^B
+\mathbf{p}^{(k)} = f_{\theta^{(k)}}(\mathbf{x}) \in \mathbb{R}^B \quad \text{for } k = 1, \ldots, K
 \end{equation}
 
-\item \textbf{Joint objective optimization}: Minimize the combined loss:
-\begin{align}
-\mathcal{L} &= \frac{1}{K}\sum_{k=1}^K \frac{1}{|\text{idx}^{(k)}|}\sum_{i \in \text{idx}^{(k)}} \ell(f_{\theta^{(k)}}(x_i), y_i) \nonumber \\
-&\quad + \lambda \cdot \frac{1}{B}\sum_{j=1}^B \text{Var}_k[p_j^{(k)}]
-\end{align}
+\item \textbf{Poisson-weighted losses}: For each shadow model, simulate bootstrap resampling via independent Poisson(1) weights:
+\begin{equation}
+w_j^{(k)} \sim \text{Poisson}(1), \quad \mathcal{L}_{\text{sup}}^{(k)} = \frac{\sum_j w_j^{(k)} \ell(p_j^{(k)}, y_j)}{\sum_j w_j^{(k)}}
+\end{equation}
 
-where $\text{Var}_k[p_j^{(k)}] = \frac{1}{K}\sum_{k=1}^K (p_j^{(k)} - \bar{p}_j)^2$ and $\bar{p}_j = \frac{1}{K}\sum_{k=1}^K p_j^{(k)}$.
+This Poisson weighting is equivalent in expectation to bootstrap resampling with replacement.
+
+\item \textbf{Variance penalty}: Compute the variance of predictions across shadow models on identical inputs:
+\begin{equation}
+\mathcal{L}_{\text{var}} = \frac{1}{B}\sum_{j=1}^B \text{Var}_k[p_j^{(k)}]
+\end{equation}
+
+\item \textbf{Joint optimization}: Minimize the combined objective:
+\begin{equation}
+\mathcal{L} = \frac{1}{K}\sum_{k=1}^K \mathcal{L}_{\text{sup}}^{(k)} + \lambda \cdot \mathcal{L}_{\text{var}}
+\end{equation}
 \end{enumerate}
 
-The algorithm updates all shadow models jointly using shared gradient information, encouraging consensus across bootstrap resamples while maintaining individual adaptation to each resample's characteristics.
+The key insight is that all models predict on \emph{identical inputs}, making the variance penalty meaningful---it measures disagreement due to different bootstrap weighting, not different inputs. This corrects a subtle but critical flaw in naive implementations that compute variance over predictions on \emph{different} resampled inputs.
 
 \subsection{Implementation Considerations}
 
@@ -203,7 +234,9 @@ The algorithm updates all shadow models jointly using shared gradient informatio
 
 \textbf{Inference}: At test time, predictions can be obtained from any single shadow model or their ensemble average. No additional computational cost is incurred during inference compared to standard training.
 
-\textbf{Hyperparameter selection}: We fix $K=3$ and $\lambda=0.05$ across all experiments based on preliminary validation studies. These values provide a reasonable balance between stability improvement and computational overhead.
+\textbf{Hyperparameter selection}: We fix $K=3$ across all experiments. For $\lambda$, we provide Pareto frontier analysis (Section~\ref{sec:pareto}) showing results across $\lambda \in \{0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0\}$. We recommend $\lambda = 0.05$ as a default providing a good stability-accuracy trade-off.
+
+\textbf{Connection to bagging}: Unlike standard bagging \citep{breiman1996bagging} which trains $K$ independent models on bootstrap samples, BCR jointly trains models while explicitly penalizing their disagreement. This encourages each shadow model to find solutions that are stable across bootstrap perturbations, rather than simply averaging diverse models.
 
 \section{Experimental Setup}
 
@@ -212,24 +245,38 @@ The algorithm updates all shadow models jointly using shared gradient informatio
 We evaluate our approach on four tabular datasets spanning regression and binary classification:
 
 \begin{itemize}
-\item \textbf{Synthetic Regression}: 20-dimensional Gaussian features with quadratic target function, $n=1000$
+\item \textbf{Synthetic Regression}: 20-dimensional Gaussian features with linear target plus noise, $n=4000$
 \item \textbf{California Housing}: Median house value prediction, 8 features, $n=20{,}640$
-\item \textbf{Adult Income}: Binary income classification, 14 features, $n=48{,}842$
-\item \textbf{German Credit Risk}: Binary credit risk classification, 20 features, $n=1000$
+\item \textbf{Adult Income}: Binary income classification, 14 features (one-hot encoded), $n=48{,}842$
+\item \textbf{German Credit Risk}: Binary credit risk classification, 20 features (one-hot encoded), $n=1000$
 \end{itemize}
 
 All datasets employ stratified 75\%/25\% train/test splits to ensure representative evaluation sets.
+
+\subsection{Baseline Methods}
+
+We compare BCR against five baselines:
+
+\begin{itemize}
+\item \textbf{ERM (Baseline)}: Standard empirical risk minimization with dropout.
+\item \textbf{Weight Decay}: ERM with L2 regularization ($\lambda_{L2} = 10^{-2}$). Tests whether parameter regularization alone improves stability.
+\item \textbf{SAM}: Sharpness-Aware Minimization \citep{foret2020sharpness} with $\rho = 0.05$. Tests whether flatter minima improve bootstrap stability.
+\item \textbf{R-Drop}: Regularized dropout \citep{liang2021rdrop} with $\alpha = 0.5$. Tests whether consistency under dropout noise transfers to bootstrap stability.
+\item \textbf{Bagging}: Standard ensemble of $K=3$ models trained independently on bootstrap samples \citep{breiman1996bagging}. Provides a direct comparison to ensemble methods.
+\end{itemize}
+
+We note that baseline hyperparameters (weight decay strength, SAM $\rho$, R-Drop $\alpha$) were set to commonly recommended values rather than tuned for stability. A more comprehensive comparison would tune all methods on a validation set, though this would substantially increase computational cost.
 
 \subsection{Model Architecture and Training}
 
 We employ a standardized two-layer multilayer perceptron architecture across all experiments:
 \begin{itemize}
-\item Input layer to 64 hidden units with ReLU activation and dropout ($p=0.1$)
-\item Hidden layer to 128 units with ReLU activation and dropout ($p=0.1$)  
+\item Input layer to 64 hidden units with ReLU activation and dropout ($p=0.2$)
+\item Hidden layer to 64 units with ReLU activation and dropout ($p=0.2$)
 \item Output layer (1 unit for regression, 2 for classification)
 \end{itemize}
 
-Training configuration includes Adam optimization with learning rate $10^{-3}$, batch size 64, and 25 epochs. We conduct 30 independent training runs per experimental condition to ensure statistical reliability.
+Training configuration includes Adam optimization with learning rate $10^{-3}$, batch size 64, and 25 epochs for regression (20 for classification). We conduct 30 independent training runs per experimental condition to ensure statistical reliability.
 
 \subsection{Evaluation Metrics}
 
@@ -243,71 +290,144 @@ Training configuration includes Adam optimization with learning rate $10^{-3}$, 
 
 This metric quantifies prediction variability in the same units as the target variable, facilitating interpretation across tasks.
 
+\textbf{Additional classification metrics}: For classification tasks, we additionally report:
+\begin{itemize}
+\item \emph{Probability stability}: Variance of predicted class probabilities (after softmax)
+\item \emph{Flip rate}: Fraction of samples where at least one fit disagrees with the modal prediction
+\item \emph{Quantiles}: 90th and 95th percentiles of per-sample instability to capture worst-case behavior
+\end{itemize}
+
 \section{Results}
 
 \subsection{Main Experimental Results}
 
-Table~\ref{tab:main_results} presents our primary experimental findings comparing standard empirical risk minimization against bootstrap-aware training with $K=3$ shadow models and $\lambda=0.05$.
+Table~\ref{tab:main_results} presents our primary experimental findings comparing all methods across four datasets with $K=3$ shadow models and $\lambda=0.05$ for BCR.
 
 \begin{table}[t]
 \centering
-\caption{Comparison of predictive performance and bootstrap stability. Values represent mean $\pm$ standard deviation across 30 independent runs.}
+\caption{Comparison of predictive performance and bootstrap stability across all methods. Values represent mean across 30 independent runs. Stability RMSE is in prediction units (lower is better).}
 \label{tab:main_results}
-\begin{tabular}{lllccr}
-\toprule
-Dataset & Metric & Baseline & Bootstrap-Aware & $\Delta$ Error & $\Delta$ Stability \\
-\midrule
-Synthetic & RMSE & 23.88 $\pm$ 0.37 & 29.46 $\pm$ 0.64 & +23\% & \textbf{-38\%} \\
-California & RMSE & 0.591 $\pm$ 0.005 & 0.598 $\pm$ 0.004 & +1\% & \textbf{-26\%} \\
-Adult & Accuracy & 0.826 $\pm$ 0.001 & 0.825 $\pm$ 0.001 & -0.1pp & \textbf{-81\%} \\
-German Credit & Accuracy & 0.697 $\pm$ 0.009 & 0.688 $\pm$ 0.006 & -0.9pp & \textbf{-48\%} \\
-\bottomrule
-\end{tabular}
+\small
+\input{../tabs/main_results.tex}
 \end{table}
 
-The results demonstrate substantial improvements in bootstrap stability across all datasets, with reductions in prediction variance ranging from 26\% to 81\%. Importantly, these stability gains come at minimal cost to predictive accuracy: real-world datasets (California Housing, Adult Income, German Credit) show accuracy degradation limited to one percentage point or less.
+The results demonstrate that BCR provides substantial stability improvements on most datasets, though no single method dominates across all settings. Key findings:
 
-The synthetic regression task represents a challenging scenario where model capacity substantially exceeds data complexity, leading to higher baseline instability. Even in this worst-case setting, our method achieves a 38\% reduction in bootstrap variance, albeit with a more substantial accuracy cost (+23\% RMSE).
+\begin{itemize}
+\item \textbf{BCR reduces instability substantially}: On German Credit and Adult Income, BCR achieves 47\% and 32\% reductions in prediction instability compared to baseline ERM. On Synthetic and California, improvements are 34\% and 24\%.
+\item \textbf{Baselines show dataset-dependent effectiveness}: Weight decay achieves strong logit stability on Adult. Bagging achieves the best stability on California Housing (0.053 vs BCR's 0.066). These results suggest that simpler methods may suffice for some problems.
+\item \textbf{Accuracy trade-offs are generally modest}: On real-world classification tasks (Adult, German Credit), BCR's accuracy degradation is under 1 percentage point. The synthetic regression dataset shows a larger RMSE increase (24.90 vs 23.99), reflecting the stability-accuracy trade-off.
+\item \textbf{Method selection is context-dependent}: Standard bagging excels on California Housing; weight decay excels on Adult logit stability. BCR provides the best stability on German Credit and competitive performance elsewhere.
+\end{itemize}
 
-\subsection{Stability-Accuracy Trade-off Analysis}
+\subsection{Pareto Frontier Analysis}
+\label{sec:pareto}
 
-To quantify the practical significance of our stability improvements, we analyze the decomposition of total prediction uncertainty. For the Adult Income dataset, bootstrap variance accounts for 29\% of total prediction uncertainty under standard training, reducing to 10\% with bootstrap-aware regularization. This represents a meaningful reduction in the uncertainty attributable to training procedure variability rather than fundamental task difficulty.
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.48\textwidth]{../figs/pareto_synthetic.pdf}
+\includegraphics[width=0.48\textwidth]{../figs/pareto_adult.pdf}
+\caption{Pareto frontiers showing the stability-accuracy trade-off for Synthetic Regression (left) and Adult Income classification (right). By varying $\lambda$, BCR accesses different points along the stability-accuracy trade-off.}
+\label{fig:pareto}
+\end{figure}
+
+Figure~\ref{fig:pareto} shows the stability-accuracy trade-off as $\lambda$ varies from 0 to 1. By adjusting $\lambda$, BCR can trade off between accuracy and stability, accessing regions of the trade-off space unavailable to fixed baseline methods. However, the relative positioning varies by dataset: on Adult Income, BCR accesses favorable stability-accuracy combinations, while on other datasets, some baselines may occupy competitive positions.
+
+For classification tasks (Adult Income), the Pareto frontier reveals that substantial stability improvements (up to 32\% reduction in logit variance) are achievable with modest accuracy loss ($<$0.5 percentage points) by choosing $\lambda \in [0.02, 0.1]$.
+
+\subsection{Detailed Classification Stability Analysis}
+
+Table~\ref{tab:classification} presents detailed stability metrics for classification tasks, distinguishing logit-level, probability-level, and hard-label stability.
+
+\begin{table}[t]
+\centering
+\caption{Detailed classification stability metrics (Adult Income dataset). Lower values indicate greater stability.}
+\label{tab:classification}
+\small
+\input{../tabs/classification_stability.tex}
+\end{table}
+
+BCR reduces instability at all levels of the prediction pipeline. The any-flip rate (fraction of samples with any label disagreement across fits) drops from 4.7\% to 3.8\%, a 19\% relative reduction. While the absolute flip rates are already low for this well-specified classification task, BCR achieves larger reductions at the logit level (32\%), suggesting greater benefits for downstream tasks sensitive to probability calibration.
+
+\subsection{Ablation: Challenging Conditions}
+
+Table~\ref{tab:ablation} presents results on challenging synthetic datasets designed to stress-test stability methods.
+
+\begin{table}[t]
+\centering
+\caption{Ablation study on challenging datasets. $\Delta$ Stability shows BCR improvement over baseline.}
+\label{tab:ablation}
+\small
+\input{../tabs/ablation_study.tex}
+\end{table}
+
+BCR's effectiveness varies substantially across conditions. The benefits are largest for underdetermined problems (low $n$, high $p$: 66\% reduction) and overcapacity settings (56\% reduction), precisely where refit variance is most problematic. However, BCR provides only modest improvement under label noise (6\% reduction), suggesting that label noise creates irreducible variance that regularization cannot address. Correlated features show intermediate benefits (27\% reduction).
 
 \section{Related Work}
 
 Our approach differs fundamentally from existing stability methods in directly targeting prediction variance under data resampling rather than indirect proxies.
 
-\textbf{Sharpness-based methods} such as Sharpness-Aware Minimization \cite{foret2020sharpness} and Entropy-SGD \cite{chaudhari2019entropy} seek flatter loss surfaces under the hypothesis that such minima correspond to more stable predictions. However, the relationship between weight-space geometry and bootstrap prediction variance remains theoretically unclear.
+\textbf{Sharpness-based methods} such as Sharpness-Aware Minimization \cite{foret2020sharpness} and Entropy-SGD \cite{chaudhari2019entropy} seek flatter loss surfaces under the hypothesis that such minima correspond to more stable predictions. Our experiments show that SAM provides inconsistent stability improvements (0--11\% across datasets), suggesting that weight-space flatness is an imperfect proxy for bootstrap stability.
 
-\textbf{Stochastic consistency methods} like R-Drop \cite{liang2021rdrop} enforce agreement between predictions under different dropout masks, addressing network stochasticity but not data resampling variance. These methods are architecture-specific and do not generalize to bootstrap stability.
+\textbf{Stochastic consistency methods} like R-Drop \cite{liang2021rdrop} enforce agreement between predictions under different dropout masks, addressing network stochasticity but not data resampling variance. R-Drop shows variable effectiveness, providing up to 17\% stability improvement on some datasets but occasionally increasing instability on others.
+
+\textbf{Bagging and ensembles} \citep{breiman1996bagging} reduce variance through model averaging. Standard bagging with $K=3$ models provides competitive stability improvements and achieves the best stability on California Housing in our experiments. BCR outperforms bagging on classification tasks (Adult, German Credit) by explicitly encouraging individual models to be stable rather than simply averaging diverse models, but the relative advantage is dataset-dependent.
 
 \textbf{Teacher-student approaches} including Mean Teacher \cite{tarvainen2017mean} stabilize training dynamics through exponential moving averages of model weights. While effective for reducing optimization noise, these methods do not explicitly address variability under data resampling.
 
 \textbf{Distributionally robust optimization} methods such as $\chi^2$-DRO \cite{duchi2021learning} penalize loss variance across data subsets. However, loss variance does not directly correspond to prediction variance---models may achieve similar loss values while producing substantially different predictions.
 
+\textbf{Influence functions} \citep{koh2017understanding} provide a theoretical framework for understanding prediction sensitivity to training data. Our first-order analysis (Equation~\ref{eq:sensitivity}) builds on this framework to explain why direct variance penalties are well-motivated.
+
 \section{Discussion and Limitations}
+
+\subsection{What BCR Stabilizes}
+
+It is important to clarify exactly what BCR targets. The estimand is \emph{bootstrap prediction instability}---the variance of predictions at a given input across models trained on bootstrap resamples of the training data. This is a proxy for \emph{refit variance}, which practitioners encounter when retraining models on new data samples from the same distribution.
+
+BCR does not target:
+\begin{itemize}
+\item \emph{Epistemic uncertainty}: BCR reduces variance, not bias, and does not provide calibrated uncertainty estimates.
+\item \emph{Optimization noise}: Random seed variability within a single dataset is not the target (though BCR may reduce this as a side effect).
+\item \emph{Distribution shift}: BCR does not address out-of-distribution robustness.
+\end{itemize}
+
+For classification, BCR stabilizes all levels of the prediction pipeline: logits, probabilities, and hard labels. The flip rate reduction (Table~\ref{tab:classification}) is particularly relevant for deployment scenarios where label consistency across model versions is critical.
 
 \subsection{Computational Considerations}
 
-The primary limitation of our approach is computational overhead. Training $K$ shadow models increases memory requirements by a factor of $K$ and training time by approximately $2$--$3\times$ due to additional forward and backward passes. For large-scale models or datasets, this overhead may prove prohibitive.
+The primary limitation of our approach is computational overhead. Training $K$ shadow models increases memory requirements by a factor of $K$ and training time by approximately $2$--$3\times$ due to additional forward and backward passes. For large-scale models or datasets, this overhead may prove prohibitive. On datasets where BCR provides marginal improvement over bagging (e.g., Synthetic: 3.62 vs 3.64), the computational cost may not be justified compared to training independent bagged models.
 
 Future work could address this limitation through influence function approximations that enable single-model estimation of bootstrap variance, eliminating the need for multiple shadow models while preserving the direct optimization objective.
 
-\subsection{Theoretical Understanding}
+\subsection{Theoretical Gaps}
 
-While our empirical results demonstrate clear benefits, the theoretical relationship between micro-bootstrap variance within mini-batches and full bootstrap variance across complete datasets merits further investigation. Establishing formal conditions under which our approximation remains valid would strengthen the theoretical foundations of the approach.
+Our first-order sensitivity analysis (Equation~\ref{eq:sensitivity}) provides intuition for why BCR works but does not constitute a formal guarantee. Key open questions include:
+\begin{itemize}
+\item Under what conditions does mini-batch Poisson weighting accurately approximate full-dataset bootstrap variance?
+\item How does the approximation quality depend on batch size, number of shadow models $K$, and training dynamics?
+\item Can we derive optimal $\lambda$ as a function of dataset characteristics?
+\end{itemize}
 
-\subsection{Hyperparameter Sensitivity}
+\subsection{Statistical Methodology}
 
-Our experiments employ fixed hyperparameters ($K=3$, $\lambda=0.05$) across all datasets. While these values prove effective in our evaluation, optimal settings may vary with model architecture, dataset characteristics, and task requirements. Developing principled approaches for hyperparameter selection represents an important direction for future research.
+While we report results across $R=30$ independent runs, we do not provide formal significance tests (confidence intervals, p-values) comparing methods. Given the magnitude of differences observed (e.g., 0.053 vs 0.065 stability on California Housing), some comparisons may not be statistically significant. Future work should include bootstrap confidence intervals for method comparisons.
+
+\subsection{When BCR Helps Most}
+
+Our ablation studies (Table~\ref{tab:ablation}) suggest BCR provides the largest benefits in high-variance settings caused by model specification issues: underdetermined problems (66\% reduction) and overcapacity (56\% reduction). However, BCR provides minimal benefit under label noise (6\% reduction), indicating that variance caused by irreducible noise in the labels cannot be addressed through regularization.
+
+More broadly, our main results show that BCR's relative advantage is dataset-dependent. BCR excels on classification tasks (Adult, German Credit) but is outperformed by simpler methods on California Housing (bagging) and Adult logit stability (weight decay). This suggests practitioners should evaluate multiple approaches rather than assuming BCR will dominate.
 
 \section{Conclusion}
 
-We have presented a bootstrap-aware regularization technique that directly addresses prediction instability under data resampling, a fundamental challenge in reliable machine learning deployment. Our method achieves substantial reductions in bootstrap prediction variance (25--80\%) while maintaining competitive predictive accuracy across tabular datasets.
+We have presented bootstrap-consistency regularization (BCR), a training procedure that directly minimizes prediction instability under data resampling. Our key contributions include: (1) clearly defining bootstrap prediction instability as the target estimand, (2) a tractable training algorithm using Poisson-weighted losses to simulate bootstrap perturbations, (3) first-order sensitivity analysis justifying why direct variance penalties target the right quantity, and (4) empirical evaluation demonstrating 24--47\% reductions in instability across four datasets.
 
-The key insight underlying our approach is that stability under data resampling can be effectively improved by explicitly penalizing prediction disagreement across bootstrap resamples during training, rather than relying on indirect proxies such as weight-space curvature or optimization dynamics. While computationally more demanding than single-model training, our method provides a direct solution to a pervasive problem in machine learning reliability.
+The main question we address is: \emph{does the stochastic training surrogate actually reduce full-retraining instability?} Our experiments confirm that it does, though effectiveness varies by dataset and problem structure. BCR excels on classification tasks and high-variance settings (underdetermined problems, overcapacity), while simpler methods like bagging or weight decay may suffice for some regression tasks or when label noise is present.
 
-Future research directions include developing computationally efficient approximations through influence functions, establishing theoretical guarantees for the micro-bootstrap approximation, and extending the approach to other neural architectures and domains beyond tabular data.
+The key insight is that stability under data resampling can benefit from directly penalizing prediction disagreement across bootstrap perturbations on \emph{identical inputs}, rather than relying on indirect proxies. While computationally more demanding than single-model training, BCR provides a principled approach to bootstrap prediction instability that is particularly effective on classification tasks and high-variance settings, though simpler methods may suffice in other contexts.
+
+Future research directions include developing computationally efficient single-model approximations through influence functions, establishing theoretical guarantees for the mini-batch Poisson approximation, extending to other architectures (transformers, CNNs), and combining BCR with other regularization techniques.
 
 
 

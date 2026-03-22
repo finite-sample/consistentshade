@@ -63,10 +63,10 @@ $$\[
 
 | Dataset | Metric | Baseline | k = 3 (λ=.05) | Δ Error | Δ Stability |
 |---------|--------|----------|---------------|---------|-------------|
-| Synthetic | RMSE | **23.88** ± 0.37 | 29.46 ± 0.64 | ↑ 23 % | **–38 %** |
-| California | RMSE | **0.591** ± 0.005 | 0.598 ± 0.004 | ↑ 1 % | **–26 %** |
-| Adult | Acc | **0.826** ± .001 | 0.825 ± .001 | –0.1 pp | **–81 %** |
-| Credit | Acc | **0.697** ± .009 | 0.688 ± .006 | –0.9 pp | **–48 %** |
+| Synthetic | RMSE | **23.99** ± 0.36 | 24.91 ± 0.30 | ↑ 4 % | **–34 %** |
+| California | RMSE | **0.562** ± 0.004 | 0.570 ± 0.003 | ↑ 1 % | **–24 %** |
+| Adult | Acc | **0.826** ± .001 | 0.826 ± .001 | 0 pp | **–32 %** |
+| Credit | Acc | **0.696** ± .007 | 0.687 ± .004 | –0.9 pp | **–47 %** |
 
 > *StabilityRMSE* is expressed in the same units as the prediction  
 > (log‑odds for classification), so lower is better.
@@ -75,9 +75,9 @@ $$\[
 
 ## 6  Interpretation
 
-* Real‑world datasets show **25–80 % reduction** in bootstrap drift for ≤ 1 pp accuracy loss.  
-* Synthetic toy shows the worst‑case cost (+23 % RMSE) when the model has high capacity relative to data size.  
-* Stability share of total error drops from 18 % → 14 % (Synthetic) and 29 % → 10 % (Adult).
+* Real-world datasets show **24–47 % reduction** in bootstrap drift for ≤ 1 pp accuracy loss.
+* Synthetic toy shows a modest cost (+4 % RMSE) for a 34% stability improvement.
+* Stability improvements are consistent across regression and classification tasks.
 
 ---
 
