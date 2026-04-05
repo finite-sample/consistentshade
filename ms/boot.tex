@@ -142,6 +142,22 @@ We propose \emph{bootstrap-consistency regularization} (BCR), a fundamentally di
     \item \textbf{Empirics}: We demonstrate that BCR reduces actual full-retraining instability by 22--50\% across four datasets, with competitive performance relative to natural baselines on the stability-accuracy Pareto frontier.
 \end{enumerate}
 
+\section{Related Work}
+
+Our approach differs fundamentally from existing stability methods in directly targeting prediction variance under data resampling rather than indirect proxies.
+
+\textbf{Sharpness-based methods} such as Sharpness-Aware Minimization \citep{foret2020sharpness} and Entropy-SGD \citep{chaudhari2019entropy} seek flatter loss surfaces under the hypothesis that such minima correspond to more stable predictions. Our experiments show that SAM provides inconsistent stability improvements (0--11\% across datasets), suggesting that weight-space flatness is an imperfect proxy for bootstrap stability.
+
+\textbf{Stochastic consistency methods} like R-Drop \citep{liang2021rdrop} enforce agreement between predictions under different dropout masks, addressing network stochasticity but not data resampling variance. R-Drop shows variable effectiveness, providing up to 17\% stability improvement on some datasets but occasionally increasing instability on others.
+
+\textbf{Bagging and ensembles} \citep{breiman1996bagging} reduce variance through model averaging. Standard bagging with $K=3$ models provides competitive stability improvements and achieves the best stability on California Housing in our experiments. BCR outperforms bagging on classification tasks (Adult, German Credit) but not on California Housing regression, suggesting a pattern: BCR may provide greater benefits when prediction variance stems from model specification uncertainty (which regularization can address) rather than irreducible noise in the target variable (which it cannot). California Housing's continuous target with substantial measurement noise may favor bagging's averaging approach over BCR's attempt to stabilize individual models.
+
+\textbf{Teacher-student approaches} including Mean Teacher \citep{tarvainen2017mean} stabilize training dynamics through exponential moving averages of model weights. While effective for reducing optimization noise, these methods do not explicitly address variability under data resampling.
+
+\textbf{Distributionally robust optimization} methods such as $\chi^2$-DRO \citep{duchi2021learning} penalize loss variance across data subsets. However, loss variance does not directly correspond to prediction variance---models may achieve similar loss values while producing substantially different predictions.
+
+\textbf{Influence functions} \citep{koh2017understanding} provide a theoretical framework for understanding prediction sensitivity to training data. Our first-order analysis (Equation~\ref{eq:sensitivity}) builds on this framework to explain why direct variance penalties are well-motivated.
+
 \section{Method}
 
 \subsection{Problem Formulation}
@@ -229,9 +245,28 @@ The key insight is that all models predict on \emph{identical inputs}, making th
 
 \textbf{Connection to bagging}: Unlike standard bagging \citep{breiman1996bagging} which trains $K$ independent models on bootstrap samples, BCR jointly trains models while explicitly penalizing their disagreement. This encourages each shadow model to find solutions that are stable across bootstrap perturbations, rather than simply averaging diverse models.
 
-\section{Experimental Setup}
+\subsection{Connection to Influence Function Regularization}
 
-\subsection{Datasets and Tasks}
+A natural question is whether the sensitivity analysis suggests a single-model approach. The first-order approximation (Equation~\ref{eq:sensitivity}) suggests that bootstrap variance can be estimated as $\sigma^2_{\text{boot}}(x) \approx J_x^\top H^{-1} \Sigma_g H^{-1} J_x$, where $J_x = \nabla_\theta f_\theta(x)$ is the prediction Jacobian, $H$ is the Hessian, and $\Sigma_g$ is the gradient covariance. Influence Function Regularization (IFR) directly penalizes this estimated variance during training.
+
+We implement two variants: (1) \emph{IFR-Diagonal}, which approximates $H$ with a diagonal Fisher matrix, and (2) \emph{IFR-KFAC}, which uses Kronecker-Factored Approximate Curvature \citep{martens2015optimizing} for a block-diagonal approximation that captures within-layer parameter correlations.
+
+Our experiments reveal that both IFR variants provide minimal stability improvement. Diagonal IFR achieves $<$2\% improvement across datasets, while IFR-KFAC performs comparably---showing marginal improvement on one dataset (California Housing: 7\% better than diagonal) but no improvement on others.
+
+Several factors may explain IFR's limited effectiveness:
+\begin{itemize}
+\item \emph{First-order approximation limitations}: The linear approximation may be insufficient to capture the nonlinear relationship between data perturbations and prediction changes during neural network training.
+\item \emph{Objective mismatch}: IFR penalizes the \emph{estimated} influence-based variance at each training step, but this may not correspond to minimizing \emph{actual} bootstrap variance at convergence.
+\item \emph{Hessian approximation artifacts}: While KFAC provides no meaningful improvement over diagonal approximations (suggesting the Hessian approximation is not the bottleneck), both approximations may still introduce optimization artifacts when used as regularization penalties.
+\end{itemize}
+
+The key insight is that BCR's joint training of multiple models under different bootstrap weights provides a more direct optimization signal than single-model influence approximations. By actually training multiple models with different Poisson weights and penalizing their disagreement, BCR sidesteps the need for accurate influence function estimation.
+
+\section{Experiments}
+
+\subsection{Setup}
+
+\subsubsection{Datasets and Tasks}
 
 We evaluate our approach on four tabular datasets spanning regression and binary classification:
 
@@ -244,7 +279,7 @@ We evaluate our approach on four tabular datasets spanning regression and binary
 
 All datasets employ 75\%/25\% train/test splits (stratified for classification tasks) to ensure representative evaluation sets.
 
-\subsection{Baseline Methods}
+\subsubsection{Baselines}
 
 We compare BCR against seven baselines:
 
@@ -260,7 +295,7 @@ We compare BCR against seven baselines:
 
 We note that baseline hyperparameters (weight decay strength, SAM $\rho$, R-Drop $\alpha$) were set to commonly recommended values rather than tuned for stability. A more comprehensive comparison would tune all methods on a validation set, though this would substantially increase computational cost.
 
-\subsection{Model Architecture and Training}
+\subsubsection{Model Architecture and Training}
 
 We employ a standardized two-layer multilayer perceptron architecture across all experiments:
 \begin{itemize}
@@ -271,7 +306,7 @@ We employ a standardized two-layer multilayer perceptron architecture across all
 
 Training configuration includes Adam optimization with learning rate $10^{-3}$, batch size 64, and 25 epochs for regression (20 for classification). We conduct 30 independent training runs per experimental condition to ensure statistical reliability.
 
-\subsection{Comprehensive Hyperparameter Analysis}
+\subsubsection{Hyperparameter Configurations}
 
 Beyond the main experiments, we conduct comprehensive hyperparameter sensitivity analysis totaling 5,910 training runs across three experimental paradigms:
 
@@ -283,7 +318,7 @@ Beyond the main experiments, we conduct comprehensive hyperparameter sensitivity
 \item \textbf{Sample Size Scaling}: Using California Housing, we vary the training set fraction from 10\% to 100\% to characterize how BCR's benefits scale with data availability.
 \end{itemize}
 
-\subsection{Evaluation Metrics}
+\subsubsection{Evaluation Metrics}
 
 \textbf{Predictive performance}: We report test RMSE for regression tasks and classification accuracy for binary tasks.
 
@@ -301,9 +336,20 @@ This metric quantifies prediction variability in the same units as the target va
 \item \emph{Flip rate}: Fraction of samples where at least one fit disagrees with the modal prediction
 \end{itemize}
 
-\section{Results}
+\subsubsection{Statistical Methodology}
 
-\subsection{Main Experimental Results}
+We report results across $R=30$ independent training runs per method. For stability metrics, we compute bootstrap confidence intervals by resampling over the $R$ runs: for each of $B=2000$ bootstrap samples, we draw $R$ runs with replacement and recompute the stability RMSE, yielding a distribution from which we extract the standard error and 95\% confidence interval. This approach accounts for the fact that stability is estimated from the cross-run variance structure.
+
+For pairwise method comparisons, we use a paired bootstrap test: we resample the same run indices for both methods, compute the difference in stability, and assess whether the 95\% CI for the difference excludes zero. We also report Cohen's $d$ effect sizes using the pooled standard deviation of bootstrap stability estimates.
+
+This statistical framework allows us to distinguish:
+\begin{itemize}
+\item \emph{Significant improvements}: BCR vs baseline shows significant reductions on German Credit ($p<0.01$, $d>0.8$) and Adult Income ($p<0.01$, $d>0.5$).
+\item \emph{Comparable methods}: BCR vs bagging on California Housing and Synthetic shows differences not statistically distinguishable from zero ($p>0.05$).
+\item \emph{Trade-off cases}: Weight decay achieves better logit stability than BCR on Adult ($p<0.01$), suggesting different methods excel in different contexts.
+\end{itemize}
+
+All stability estimates in Table~\ref{tab:main_results} include bootstrap standard errors in parentheses.
 
 Table~\ref{tab:main_results} presents our primary experimental findings comparing all methods across four datasets with $K=3$ shadow models and $\lambda=0.05$ for BCR.
 
@@ -324,7 +370,7 @@ The results demonstrate that BCR provides substantial stability improvements on 
 \item \textbf{Method selection is context-dependent}: Standard bagging excels on California Housing; weight decay excels on Adult logit stability. BCR provides the best stability on German Credit and competitive performance elsewhere.
 \end{itemize}
 
-\subsection{Pareto Frontier Analysis}
+\subsection{Stability-Accuracy Trade-off}
 \label{sec:pareto}
 
 \begin{figure}[t]
@@ -338,8 +384,6 @@ The results demonstrate that BCR provides substantial stability improvements on 
 Figure~\ref{fig:pareto} shows the stability-accuracy trade-off as $\lambda$ varies from 0 to 1. By adjusting $\lambda$, BCR can trade off between accuracy and stability, accessing regions of the trade-off space unavailable to fixed baseline methods. However, the relative positioning varies by dataset: on Adult Income, BCR accesses favorable stability-accuracy combinations, while on other datasets, some baselines may occupy competitive positions.
 
 For classification tasks (Adult Income), the Pareto frontier reveals that substantial stability improvements (up to 32\% reduction in logit variance) are achievable with modest accuracy loss ($<$0.5 percentage points) by choosing $\lambda \in [0.02, 0.1]$.
-
-\subsection{Detailed Classification Stability Analysis}
 
 Table~\ref{tab:classification} presents detailed stability metrics for classification tasks, distinguishing logit-level, probability-level, and hard-label stability.
 
@@ -385,9 +429,13 @@ Table~\ref{tab:k_lambda_summary} summarizes the best configurations found for ea
 \input{../tabs/comprehensive/k_lambda_summary.tex}
 \end{table}
 
-\subsection{When Does BCR Help Most?}
+\subsection{Stress Tests}
 
-Table~\ref{tab:challenging} presents comprehensive results across challenging scenarios designed to identify where BCR provides the largest benefits.
+We evaluate BCR under challenging conditions designed to identify where it provides the largest benefits.
+
+\subsubsection{Challenging Scenarios}
+
+Table~\ref{tab:challenging} presents comprehensive results across challenging scenarios.
 
 \begin{table}[t]
 \centering
@@ -409,7 +457,7 @@ The results reveal clear patterns:
 \item \textbf{Correlated features}: BCR provides 14--31\% improvement under feature correlation ($\rho=0.5$ to $0.9$). Higher correlation reduces the benefit, possibly because correlated features create redundancy that already stabilizes predictions somewhat.
 \end{itemize}
 
-\subsection{Sample Size Scaling}
+\subsubsection{Sample Size Scaling}
 
 Table~\ref{tab:scaling} shows how BCR's benefit scales with training set size on California Housing.
 
@@ -425,23 +473,7 @@ The benefit of BCR scales inversely with sample size: at $n=1{,}548$ (10\% of da
 
 The RMSE cost of BCR is modest: approximately 1--2\% RMSE increase across all sample sizes. This trade-off may be acceptable in applications where prediction stability is valued.
 
-\section{Related Work}
-
-Our approach differs fundamentally from existing stability methods in directly targeting prediction variance under data resampling rather than indirect proxies.
-
-\textbf{Sharpness-based methods} such as Sharpness-Aware Minimization \citep{foret2020sharpness} and Entropy-SGD \citep{chaudhari2019entropy} seek flatter loss surfaces under the hypothesis that such minima correspond to more stable predictions. Our experiments show that SAM provides inconsistent stability improvements (0--11\% across datasets), suggesting that weight-space flatness is an imperfect proxy for bootstrap stability.
-
-\textbf{Stochastic consistency methods} like R-Drop \citep{liang2021rdrop} enforce agreement between predictions under different dropout masks, addressing network stochasticity but not data resampling variance. R-Drop shows variable effectiveness, providing up to 17\% stability improvement on some datasets but occasionally increasing instability on others.
-
-\textbf{Bagging and ensembles} \citep{breiman1996bagging} reduce variance through model averaging. Standard bagging with $K=3$ models provides competitive stability improvements and achieves the best stability on California Housing in our experiments. BCR outperforms bagging on classification tasks (Adult, German Credit) but not on California Housing regression, suggesting a pattern: BCR may provide greater benefits when prediction variance stems from model specification uncertainty (which regularization can address) rather than irreducible noise in the target variable (which it cannot). California Housing's continuous target with substantial measurement noise may favor bagging's averaging approach over BCR's attempt to stabilize individual models.
-
-\textbf{Teacher-student approaches} including Mean Teacher \citep{tarvainen2017mean} stabilize training dynamics through exponential moving averages of model weights. While effective for reducing optimization noise, these methods do not explicitly address variability under data resampling.
-
-\textbf{Distributionally robust optimization} methods such as $\chi^2$-DRO \citep{duchi2021learning} penalize loss variance across data subsets. However, loss variance does not directly correspond to prediction variance---models may achieve similar loss values while producing substantially different predictions.
-
-\textbf{Influence functions} \citep{koh2017understanding} provide a theoretical framework for understanding prediction sensitivity to training data. Our first-order analysis (Equation~\ref{eq:sensitivity}) builds on this framework to explain why direct variance penalties are well-motivated.
-
-\section{Discussion and Limitations}
+\section{Discussion}
 
 \subsection{What BCR Stabilizes}
 
@@ -462,24 +494,7 @@ The primary limitation of our approach is computational overhead. Training $K$ s
 
 \textbf{Scope and scalability:} Our experiments focus on tabular data with shallow networks (2-layer MLPs with $\sim$9K parameters) and moderate dataset sizes ($n = 1{,}000$ to $48{,}000$). We do not evaluate BCR on deep networks (ResNets, Transformers), high-dimensional inputs (images, text), or large-scale datasets. Scaling BCR to such settings raises additional challenges: memory requirements for $K$ copies of a large model may be prohibitive, and the mini-batch Poisson approximation quality may degrade differently in high-capacity models. Extending BCR to modern deep learning architectures is an important direction for future work.
 
-\subsection{Influence Function Regularization: Single-Model Alternative}
-
-We also evaluate Influence Function Regularization (IFR) as a single-model alternative to BCR. The first-order sensitivity analysis (Equation~\ref{eq:sensitivity}) suggests that bootstrap variance can be approximated as $\sigma^2_{\text{boot}}(x) \approx J_x^\top H^{-1} \Sigma_g H^{-1} J_x$, where $J_x = \nabla_\theta f_\theta(x)$ is the prediction Jacobian, $H$ is the Hessian, and $\Sigma_g$ is the gradient covariance. IFR directly penalizes this estimated variance during training.
-
-We implement two variants: (1) \emph{IFR-Diagonal}, which approximates $H$ with a diagonal Fisher matrix, and (2) \emph{IFR-KFAC}, which uses Kronecker-Factored Approximate Curvature \citep{martens2015optimizing} for a block-diagonal approximation that captures within-layer parameter correlations.
-
-Our experiments reveal that both IFR variants provide minimal stability improvement. Diagonal IFR achieves $<$2\% improvement across datasets, while IFR-KFAC performs comparably---showing marginal improvement on one dataset (California Housing: 7\% better than diagonal) but no improvement on others.
-
-Several factors may explain IFR's limited effectiveness:
-\begin{itemize}
-\item \emph{First-order approximation limitations}: The linear approximation $\sigma^2_{\text{boot}}(x) \approx J^\top H^{-1} \Sigma_g H^{-1} J$ may be insufficient to capture the nonlinear relationship between data perturbations and prediction changes during neural network training.
-\item \emph{Objective mismatch}: IFR penalizes the \emph{estimated} influence-based variance at each training step, but this may not correspond to minimizing \emph{actual} bootstrap variance at convergence. The penalty changes the loss landscape in ways the influence framework does not predict.
-\item \emph{Hessian approximation artifacts}: While KFAC provides no meaningful improvement over diagonal approximations (suggesting the Hessian approximation is not the bottleneck), both approximations may still introduce optimization artifacts when used as regularization penalties.
-\end{itemize}
-
-The key insight from our experiments is that BCR's joint training of multiple models under different bootstrap weights provides a more direct optimization signal than single-model influence approximations. By actually training multiple models with different Poisson weights and penalizing their disagreement, BCR sidesteps the need for accurate influence function estimation.
-
-\subsection{Theoretical Gaps}
+\subsection{Limitations}
 \label{sec:theory_gaps}
 
 Our first-order sensitivity analysis (Equation~\ref{eq:sensitivity}) provides intuition for why BCR works but does not constitute a formal guarantee. The mini-batch Poisson approximation in particular requires careful consideration: while Poisson(1) weights are asymptotically equivalent to multinomial bootstrap weights for full-dataset resampling \citep{hanley2006poisson}, our method applies these weights within mini-batches during SGD training. This is a heuristic extension---the mini-batch variance penalty provides a stochastic estimate of the variance we would observe under full-dataset retraining, but the relationship between these quantities depends on training dynamics in ways we do not formally characterize.
@@ -494,52 +509,27 @@ Key open questions include:
 
 We emphasize that our empirical validation (Section~\ref{sec:pareto}) demonstrates that the mini-batch surrogate \emph{does} reduce actual full-retraining instability, even though we lack formal guarantees about when or why this approximation works well.
 
-\subsection{Statistical Methodology}
-
-We report results across $R=30$ independent training runs per method. For stability metrics, we compute bootstrap confidence intervals by resampling over the $R$ runs: for each of $B=2000$ bootstrap samples, we draw $R$ runs with replacement and recompute the stability RMSE, yielding a distribution from which we extract the standard error and 95\% confidence interval. This approach accounts for the fact that stability is estimated from the cross-run variance structure.
-
-For pairwise method comparisons, we use a paired bootstrap test: we resample the same run indices for both methods, compute the difference in stability, and assess whether the 95\% CI for the difference excludes zero. We also report Cohen's $d$ effect sizes using the pooled standard deviation of bootstrap stability estimates.
-
-This statistical framework allows us to distinguish:
-\begin{itemize}
-\item \emph{Significant improvements}: BCR vs baseline shows significant reductions on German Credit ($p<0.01$, $d>0.8$) and Adult Income ($p<0.01$, $d>0.5$).
-\item \emph{Comparable methods}: BCR vs bagging on California Housing and Synthetic shows differences not statistically distinguishable from zero ($p>0.05$).
-\item \emph{Trade-off cases}: Weight decay achieves better logit stability than BCR on Adult ($p<0.01$), suggesting different methods excel in different contexts.
-\end{itemize}
-
-All stability estimates in Table~\ref{tab:main_results} include bootstrap standard errors in parentheses.
-
-\subsection{When BCR Helps Most}
+\subsection{When to Use BCR}
 
 Our comprehensive experiments (Tables~\ref{tab:challenging}--\ref{tab:scaling}) characterize when BCR provides the largest benefits:
 
 \begin{itemize}
 \item \textbf{Low $n$, high $p$}: BCR excels in underdetermined settings (45--65\% improvement), precisely where bootstrap variance is most problematic.
-\item \textbf{Label noise}: Contrary to our initial ablation (which tested a limited noise configuration), comprehensive experiments show BCR remains effective under 10--40\% label noise (24--38\% improvement).
+\item \textbf{Label noise}: BCR remains effective under 10--40\% label noise (24--38\% improvement).
 \item \textbf{Small samples}: Benefits scale inversely with sample size (33\% at $n=1.5$k $\rightarrow$ 20\% at $n=15$k), but remain meaningful even at large $n$.
 \end{itemize}
 
-More broadly, our main results show that BCR's relative advantage is dataset-dependent:
-\begin{itemize}
-\item \emph{BCR vs.\ bagging}: BCR outperforms bagging on classification tasks (Adult: 0.15 vs 0.22; German: 0.06 vs 0.08 logit stability) but loses on California Housing regression (0.07 vs 0.05 stability RMSE). We hypothesize that BCR excels when variance stems from model specification uncertainty---the penalty encourages models to find stable solutions across bootstrap perturbations. Bagging may be preferred when variance stems primarily from irreducible target noise, where averaging diverse predictions is more effective than trying to stabilize individual models.
-\item \emph{BCR vs.\ weight decay}: On Adult Income, weight decay achieves dramatically better logit stability (0.04 vs BCR's 0.15). This occurs because weight decay directly constrains weight magnitudes, producing smaller logits and hence lower logit variance. However, this aggressive shrinkage may affect calibration---BCR's stability improvements operate through a different mechanism that does not uniformly shrink predictions.
-\end{itemize}
+BCR's relative advantage is dataset-dependent. BCR outperforms bagging on classification tasks (Adult: 0.15 vs 0.22; German: 0.06 vs 0.08 logit stability) but loses on California Housing regression (0.07 vs 0.05 stability RMSE). We hypothesize that BCR excels when variance stems from model specification uncertainty---the penalty encourages models to find stable solutions across bootstrap perturbations. Bagging may be preferred when variance stems primarily from irreducible target noise, where averaging diverse predictions is more effective than trying to stabilize individual models.
 
 Practitioners should consider: (1) whether variance is primarily reducible (model uncertainty) or irreducible (target noise), (2) whether logit-level stability or probability/label stability is the priority, and (3) computational constraints.
 
-\subsection{Hyperparameter Recommendations}
+\subsection{Practical Recommendations}
 
-Based on our comprehensive experiments, we offer the following guidance:
+\textbf{Hyperparameter selection:} Start with $K=3$ and $\lambda=0.05$ as defaults. Increase to $K=5$ for applications prioritizing stability, but expect diminishing returns beyond $K=5$. For classification tasks where accuracy is paramount, consider $\lambda=0.01$--$0.02$. For applications prioritizing stability over accuracy, $\lambda=0.1$--$0.2$ may be appropriate.
 
-\begin{itemize}
-\item \textbf{Number of models ($K$)}: Start with $K=3$ as the default. Increase to $K=5$ for applications prioritizing stability, but expect diminishing returns beyond $K=5$. Memory constraints may limit $K$ for large models.
+\textbf{When to use BCR:} BCR is most valuable when (1) sample size is small relative to model capacity, (2) dimensionality is high, (3) prediction stability is operationally important, or (4) bootstrap-based inference (confidence intervals, hypothesis tests) will be performed.
 
-\item \textbf{Regularization strength ($\lambda$)}: Start with $\lambda=0.05$. For classification tasks where accuracy is paramount, consider $\lambda=0.01$--$0.02$. For applications prioritizing stability over accuracy, $\lambda=0.1$--$0.2$ may be appropriate.
-
-\item \textbf{When to use BCR}: BCR is most valuable when (1) sample size is small relative to model capacity, (2) dimensionality is high, (3) prediction stability is operationally important, or (4) bootstrap-based inference (confidence intervals, hypothesis tests) will be performed.
-
-\item \textbf{When simpler methods suffice}: For large datasets with clean labels and low-dimensional features, standard bagging or weight decay may provide comparable stability with simpler implementation.
-\end{itemize}
+\textbf{When simpler methods suffice:} For large datasets with clean labels and low-dimensional features, standard bagging or weight decay may provide comparable stability with simpler implementation.
 
 \section{Conclusion}
 
