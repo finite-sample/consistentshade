@@ -2,26 +2,13 @@
 """Run main experiments comparing all methods across datasets."""
 
 import os
-import sys
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from scripts.config import EXPERIMENT_CONFIG, FIGS_DIR, TABS_DIR
-from scripts.datasets import (
-    prepare_adult_income,
-    prepare_california_housing,
-    prepare_german_credit,
-    prepare_synthetic_regression,
-)
-from scripts.metrics import (
+from bcr import (
+    EXPERIMENT_CONFIG,
     comprehensive_stability_metrics,
-    compare_methods_bootstrap,
-    cohens_d,
-)
-from scripts.trainers import (
     train_bagging_classification,
     train_bagging_regression,
     train_baseline_classification,
@@ -40,6 +27,17 @@ from scripts.trainers import (
     train_wd_regression,
 )
 
+from .datasets import (
+    prepare_adult_income,
+    prepare_california_housing,
+    prepare_german_credit,
+    prepare_synthetic_regression,
+)
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TABS_DIR = os.path.join(BASE_DIR, "tabs")
+FIGS_DIR = os.path.join(BASE_DIR, "figs")
+
 
 def run_experiment(
     dataset_name, train_ds, test_x, test_y, d_in, is_classification=False, R=30, lam=0.05
@@ -50,9 +48,7 @@ def run_experiment(
     if is_classification:
         train_fns = [
             lambda s: train_baseline_classification(s, train_ds, test_x, test_y, d_in),
-            lambda s: train_bcr_classification(
-                s, train_ds, test_x, test_y, d_in, lam=lam
-            ),
+            lambda s: train_bcr_classification(s, train_ds, test_x, test_y, d_in, lam=lam),
             lambda s: train_wd_classification(s, train_ds, test_x, test_y, d_in),
             lambda s: train_sam_classification(s, train_ds, test_x, test_y, d_in),
             lambda s: train_rdrop_classification(s, train_ds, test_x, test_y, d_in),
@@ -75,7 +71,7 @@ def run_experiment(
     results = {m: {"preds": [], "metric": []} for m in methods}
 
     for r in range(R):
-        seed = EXPERIMENT_CONFIG["base_seed"] + r
+        seed = EXPERIMENT_CONFIG.base_seed + r
         print(f"  Replicate {r + 1}/{R}", end="\r")
         for method, train_fn in zip(methods, train_fns):
             pred, metric = train_fn(seed)
@@ -129,7 +125,7 @@ def main():
     os.makedirs(TABS_DIR, exist_ok=True)
     os.makedirs(FIGS_DIR, exist_ok=True)
 
-    R = EXPERIMENT_CONFIG["n_replicates"]
+    R = EXPERIMENT_CONFIG.n_replicates
 
     print("Preparing datasets...")
     syn_ds, syn_test_x, syn_test_y, syn_d_in = prepare_synthetic_regression()
@@ -179,7 +175,6 @@ def main():
     adult_summary.to_csv(os.path.join(TABS_DIR, "adult_results.csv"), index=False)
     credit_summary.to_csv(os.path.join(TABS_DIR, "german_results.csv"), index=False)
 
-    # Save raw predictions for post-hoc analysis
     RAW_DIR = os.path.join(TABS_DIR, "raw_predictions")
     os.makedirs(RAW_DIR, exist_ok=True)
 

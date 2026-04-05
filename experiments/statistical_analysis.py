@@ -9,23 +9,21 @@ Loads raw predictions and computes:
 """
 
 import os
-import sys
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from scripts.config import TABS_DIR
-from scripts.metrics import (
-    StabilityEstimate,
-    compare_methods_bootstrap,
+from bcr import (
+    MethodComparison,
     cohens_d,
+    compare_methods_bootstrap,
     logit_stability_rmse,
     logit_stability_with_ci,
-    stability_rmse,
     stability_rmse_with_ci,
 )
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TABS_DIR = os.path.join(BASE_DIR, "tabs")
 
 
 def load_raw_predictions(dataset_name):
@@ -69,11 +67,9 @@ def analyze_dataset(dataset_name, is_classification=False, n_bootstrap=2000):
         metrics = data[metrics_key]
 
         if is_classification:
-            # For classification, preds are logits (n_fits, n_samples, n_classes)
             est = logit_stability_with_ci(preds, n_bootstrap=n_bootstrap)
             stability_val = est.point
         else:
-            # For regression, preds are scalars (n_fits, n_samples)
             est = stability_rmse_with_ci(preds, n_bootstrap=n_bootstrap)
             stability_val = est.point
 
@@ -87,10 +83,8 @@ def analyze_dataset(dataset_name, is_classification=False, n_bootstrap=2000):
             "Std_Metric": float(np.std(metrics)),
         })
 
-        # Pairwise comparison vs baseline
         if method != "baseline":
             if is_classification:
-                # Compare logit stability
                 comp = compare_logits_bootstrap(baseline_preds, preds, n_bootstrap=n_bootstrap)
             else:
                 comp = compare_methods_bootstrap(baseline_preds, preds, n_bootstrap=n_bootstrap)
@@ -117,8 +111,6 @@ def analyze_dataset(dataset_name, is_classification=False, n_bootstrap=2000):
 
 def compare_logits_bootstrap(logits_A, logits_B, n_bootstrap=2000, ci=0.95, seed=42):
     """Bootstrap test for difference in logit stability."""
-    from scripts.metrics import MethodComparison
-
     rng = np.random.RandomState(seed)
     n_fits = logits_A.shape[0]
 
@@ -146,11 +138,6 @@ def compare_logits_bootstrap(logits_A, logits_B, n_bootstrap=2000, ci=0.95, seed
         ci_upper=float(ci_upper),
         p_value=float(p_value),
     )
-
-
-def format_ci(row, value_col="Stability", se_col="SE", ci_lower="CI_Lower", ci_upper="CI_Upper"):
-    """Format as: value (SE) [CI_lower, CI_upper]"""
-    return f"{row[value_col]:.4f} ({row[se_col]:.4f}) [{row[ci_lower]:.4f}, {row[ci_upper]:.4f}]"
 
 
 def format_significance(p_value):

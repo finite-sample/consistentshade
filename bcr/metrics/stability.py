@@ -2,7 +2,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -11,6 +10,7 @@ import torch
 @dataclass
 class StabilityEstimate:
     """Container for stability estimate with uncertainty."""
+
     point: float
     se: float
     ci_lower: float
@@ -23,6 +23,7 @@ class StabilityEstimate:
 @dataclass
 class MethodComparison:
     """Container for pairwise method comparison."""
+
     diff: float
     se: float
     ci_lower: float
@@ -120,11 +121,7 @@ def compare_methods_bootstrap(
     ci_lower = np.percentile(boot_diffs, alpha * 100)
     ci_upper = np.percentile(boot_diffs, (1 - alpha) * 100)
 
-    # Two-sided p-value: proportion of bootstrap samples on opposite side of zero
-    p_value = 2 * min(
-        np.mean(boot_diffs >= 0),
-        np.mean(boot_diffs <= 0)
-    )
+    p_value = 2 * min(np.mean(boot_diffs >= 0), np.mean(boot_diffs <= 0))
     p_value = min(p_value, 1.0)
 
     return MethodComparison(
@@ -268,9 +265,7 @@ def comprehensive_stability_metrics(
             metrics["prob_std_max"] = np.sqrt(prob_var).max()
 
         n_fits, n_samples = pred_classes.shape
-        mode_pred = np.apply_along_axis(
-            lambda x: np.bincount(x).argmax(), 0, pred_classes
-        )
+        mode_pred = np.apply_along_axis(lambda x: np.bincount(x).argmax(), 0, pred_classes)
         flip_rates = (pred_classes != mode_pred).mean(axis=0)
 
         metrics["flip_rate_mean"] = flip_rates.mean()
@@ -335,8 +330,6 @@ def classification_stability_analysis(logits_matrix: np.ndarray, y_true: np.ndar
     if correct_mask.sum() > 0:
         analysis["flip_rate_correct"] = (disagreement_count[correct_mask] > 0).mean()
     if (~correct_mask).sum() > 0:
-        analysis["flip_rate_incorrect"] = (
-            disagreement_count[~correct_mask] > 0
-        ).mean()
+        analysis["flip_rate_incorrect"] = (disagreement_count[~correct_mask] > 0).mean()
 
     return analysis

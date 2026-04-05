@@ -1,14 +1,10 @@
-"""Custom optimizers."""
+"""Sharpness-Aware Minimization optimizer."""
 
 import torch
 
 
 class SAM(torch.optim.Optimizer):
-    """
-    Sharpness-Aware Minimization optimizer.
-
-    Fixed: explicit zero_grad before first_step to ensure clean gradients.
-    """
+    """Sharpness-Aware Minimization optimizer."""
 
     def __init__(self, params, base_optimizer, rho=0.05, **kwargs):
         defaults = dict(rho=rho, **kwargs)

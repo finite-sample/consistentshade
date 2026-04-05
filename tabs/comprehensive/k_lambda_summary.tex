@@ -1,0 +1,12 @@
+% K/Lambda Grid Search Summary - Best configurations by dataset
+% Stability RMSE (lower is better), Metric: RMSE for regression, Accuracy for classification
+\begin{tabular}{llrrrrr}
+\toprule
+Dataset & Task & Best K & Best $\lambda$ & Stability & Metric & vs Baseline \\
+\midrule
+Synthetic & Regression & 10 & 0.5 & 1.98 & 25.47 & $-55\%$ \\
+California & Regression & 10 & 1.0 & 0.044 & 0.578 & $-42\%$ \\
+Adult & Classification & 10 & 0.01 & 0.090 & 82.6\% & $-46\%$ \\
+German & Classification & 10 & 1.0 & 0.036 & 68.5\% & $-56\%$ \\
+\bottomrule
+\end{tabular}

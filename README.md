@@ -2,39 +2,60 @@
 
 **Training Neural Networks for Prediction Stability**
 
-When you retrain a neural network on a new bootstrap sample, predictions can change more than you'd expect. BCR directly penalizes this instability during training, reducing prediction variance by 22-50% with minimal accuracy loss.
+When you retrain a neural network on a new bootstrap sample, predictions can change more than you'd expect. BCR directly penalizes this instability during training, reducing prediction variance by 22-65% with minimal accuracy loss.
 
 ## Installation
 
 ```bash
-git clone https://github.com/finite-sample/consistentshade.git
-cd consistentshade
-pip install -r requirements.txt
+pip install -e .
 ```
 
-**Requirements:** Python 3.8+, PyTorch, scikit-learn, pandas, numpy
+**Requirements:** Python 3.9+, PyTorch 2.0+
 
 ## Quick Start
 
 ```python
+from bcr import BCRTrainer
 import torch
-from scripts.trainers import train_bcr_regression, train_bcr_classification
 
-# For regression
-predictions, rmse = train_bcr_regression(
-    seed=42,
-    train_ds=your_train_dataset,  # TensorDataset
-    test_x=test_features,          # torch.Tensor
-    test_y=test_targets,           # torch.Tensor
+# Create trainer
+trainer = BCRTrainer(
     d_in=n_features,
-    K=3,      # number of shadow models
-    lam=0.05, # variance penalty strength
+    task='regression',  # or 'classification'
+    K=3,                # number of shadow models
+    lam=0.05            # variance penalty strength
 )
 
-# For classification
+# Train on your dataset
+trainer.fit(train_dataset, epochs=25)
+
+# Make predictions
+predictions = trainer.predict(test_x)
+
+# Or get predictions with uncertainty
+mean_pred, std_pred = trainer.predict_with_uncertainty(test_x)
+```
+
+For lower-level control:
+
+```python
+from bcr import train_bcr_regression, train_bcr_classification
+
+# Regression
+predictions, rmse = train_bcr_regression(
+    seed=42,
+    train_ds=train_dataset,
+    test_x=test_features,
+    test_y=test_targets,
+    d_in=n_features,
+    K=3,
+    lam=0.05,
+)
+
+# Classification
 predictions, accuracy = train_bcr_classification(
     seed=42,
-    train_ds=your_train_dataset,
+    train_ds=train_dataset,
     test_x=test_features,
     test_y=test_labels,
     d_in=n_features,
@@ -47,28 +68,28 @@ predictions, accuracy = train_bcr_classification(
 
 ### Main experiments (4 datasets, 8 methods, 30 replicates each)
 ```bash
-python scripts/run_main_experiments.py
+python -m experiments.run_main
 ```
 
 Results saved to `tabs/` with bootstrap standard errors.
 
-### Hyperparameter sensitivity analysis
+### Comprehensive hyperparameter analysis
 ```bash
-python scripts/run_sensitivity.py
+python -m experiments.run_comprehensive
 ```
 
-Sweeps over K, batch size, learning rate, and hidden dimensions.
+Runs K/lambda grid search, challenging scenarios, and sample size scaling.
 
 ### Statistical analysis with significance tests
 ```bash
-python scripts/statistical_analysis.py
+python -m experiments.statistical_analysis
 ```
 
 Computes bootstrap CIs, pairwise p-values, and Cohen's d effect sizes.
 
 ### Generate LaTeX tables for paper
 ```bash
-python scripts/generate_tables.py
+python -m experiments.generate_tables
 ```
 
 ## Key Parameters
@@ -83,14 +104,30 @@ python scripts/generate_tables.py
 
 ## Results Summary
 
-| Dataset | Stability Reduction | Accuracy Change |
-|---------|--------------------:|----------------:|
-| German Credit | **50%** | -0.9 pp |
+| Dataset | Stability Improvement | Accuracy Change |
+|---------|----------------------:|----------------:|
+| German Credit | **47%** | -1.0 pp |
 | Adult Income | **32%** | < 0.1 pp |
-| California Housing | **24%** | +1.5% RMSE |
+| California Housing | **24%** | +1.4% RMSE |
 | Synthetic | **34%** | +4% RMSE |
 
 BCR outperforms baselines (SAM, R-Drop, weight decay) on classification tasks. For some regression tasks, standard bagging may be equally effective.
+
+### Key Findings from Comprehensive Experiments
+
+**When BCR helps most:**
+- Low n, high p scenarios: **45-65%** stability improvement
+- Underdetermined problems benefit most from regularization
+- Benefits scale inversely with sample size (33% at n=1.5k → 20% at n=15k)
+
+**Robustness:**
+- Handles 10-40% label noise: **24-38%** improvement
+- Correlated features (ρ=0.5-0.9): **15-31%** improvement
+
+**Optimal hyperparameters:**
+- K=3-5 provides good stability-compute tradeoff
+- λ=0.05-0.1 balances stability and accuracy
+- Diminishing returns beyond K=5
 
 ## How It Works
 
@@ -108,21 +145,23 @@ At inference, use any single model or average predictions.
 ## Project Structure
 
 ```
-consistentshade/
-├── scripts/
-│   ├── trainers/          # Training functions for all methods
-│   │   ├── bcr.py         # Bootstrap-Consistency Regularization
-│   │   ├── baseline.py    # Standard ERM
-│   │   ├── sam.py         # Sharpness-Aware Minimization
-│   │   └── ...
-│   ├── datasets.py        # Dataset preparation
-│   ├── metrics.py         # Stability metrics with bootstrap CIs
-│   ├── run_main_experiments.py
-│   ├── run_sensitivity.py
-│   └── statistical_analysis.py
-├── tabs/                  # Results (CSV + LaTeX)
-├── figs/                  # Figures
-└── ms/                    # Manuscript (LaTeX)
+bcr/
+├── bcr/
+│   ├── models/           # DropMLP and other architectures
+│   ├── regularizers/     # BCR, IFR regularization implementations
+│   ├── training/         # BCRTrainer and training functions
+│   ├── metrics/          # Stability metrics with bootstrap CIs
+│   ├── optimizers/       # SAM optimizer
+│   └── config.py         # Default configurations
+├── experiments/
+│   ├── run_main.py       # Main comparison experiments
+│   ├── run_comprehensive.py  # K/lambda grid, scenarios, scaling
+│   ├── run_sensitivity.py    # Hyperparameter sweeps
+│   └── generate_tables.py    # LaTeX table generation
+├── tabs/                 # Results (CSV + LaTeX)
+│   └── comprehensive/    # K/lambda grid, scenarios, scaling results
+├── figs/                 # Figures
+└── ms/                   # Manuscript (LaTeX)
 ```
 
 ## Citation
@@ -134,7 +173,7 @@ Click "Cite this repository" on GitHub or use:
   title={Bootstrap-Consistency Regularization: Training Neural Networks for Prediction Stability},
   author={Sood, Gaurav},
   year={2026},
-  url={https://github.com/finite-sample/consistentshade}
+  url={https://github.com/soodoku/bcr}
 }
 ```
 

@@ -6,9 +6,8 @@ import sys
 
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from scripts.config import TABS_DIR
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TABS_DIR = os.path.join(BASE_DIR, "tabs")
 
 
 def format_with_se(val, se, is_large=False):
@@ -76,7 +75,6 @@ def generate_main_results_table():
                     [f"{v:.2f}" if v > 1 else f"{v:.3f}" for v in perf_vals]
                 )
 
-            # Include SE in stability values
             is_large = not is_class and any(v > 1 for v in stab_vals if not pd.isna(v))
             stab_strs = []
             for v, se in zip(stab_vals, stab_ses):
@@ -177,7 +175,7 @@ def main():
     missing = [f for f in required_files if not os.path.exists(os.path.join(TABS_DIR, f))]
     if missing:
         print(f"Error: Missing result files: {missing}")
-        print("Run run_main_experiments.py first.")
+        print("Run run_main.py first.")
         sys.exit(1)
 
     generate_main_results_table()

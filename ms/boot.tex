@@ -122,7 +122,7 @@
 \maketitle
 
 \begin{abstract}
-Neural networks exhibit substantial prediction variability when retrained on bootstrap samples of the same dataset, undermining reliability in deployment scenarios requiring consistent decision boundaries. We propose \emph{bootstrap-consistency regularization} (BCR), a training procedure that directly minimizes prediction variance across data resamples. Our method trains multiple shadow copies of a network simultaneously, each receiving Poisson-weighted losses that simulate bootstrap resampling, while penalizing disagreement between their predictions on identical inputs. We provide a first-order sensitivity analysis showing that bootstrap prediction variance depends on the gradient-Hessian-gradient product, which our variance penalty directly targets. Empirical evaluation on four tabular datasets demonstrates 22--50\% reductions in bootstrap prediction variance compared to standard training, with accuracy degradation typically under one percentage point. BCR provides strong stability improvements on classification tasks, though simpler methods (bagging, weight decay) may be equally effective on some regression tasks. Unlike existing approaches that target indirect proxies such as weight-space curvature, BCR directly optimizes the quantity of practical interest: prediction consistency under data resampling.
+Neural networks exhibit substantial prediction variability when retrained on bootstrap samples of the same dataset, undermining reliability in deployment scenarios requiring consistent decision boundaries. We propose \emph{bootstrap-consistency regularization} (BCR), a training procedure that directly minimizes prediction variance across data resamples. Our method trains multiple shadow copies of a network simultaneously, each receiving Poisson-weighted losses that simulate bootstrap resampling, while penalizing disagreement between their predictions on identical inputs. We provide a first-order sensitivity analysis showing that bootstrap prediction variance depends on the gradient-Hessian-gradient product, which our variance penalty directly targets. Empirical evaluation on four tabular datasets demonstrates 22--65\% reductions in bootstrap prediction variance compared to standard training, with accuracy degradation typically under one percentage point. Comprehensive experiments across 180 hyperparameter configurations reveal that BCR provides the largest benefits in low-sample, high-dimensional settings (45--65\% improvement) and remains effective under label noise (24--38\% improvement) and correlated features (14--31\% improvement). BCR provides strong stability improvements on classification tasks, though simpler methods (bagging, weight decay) may be equally effective on some regression tasks. Unlike existing approaches that target indirect proxies such as weight-space curvature, BCR directly optimizes the quantity of practical interest: prediction consistency under data resampling.
 \end{abstract}
 
 \section{Introduction}
@@ -271,6 +271,18 @@ We employ a standardized two-layer multilayer perceptron architecture across all
 
 Training configuration includes Adam optimization with learning rate $10^{-3}$, batch size 64, and 25 epochs for regression (20 for classification). We conduct 30 independent training runs per experimental condition to ensure statistical reliability.
 
+\subsection{Comprehensive Hyperparameter Analysis}
+
+Beyond the main experiments, we conduct comprehensive hyperparameter sensitivity analysis totaling 5,910 training runs across three experimental paradigms:
+
+\begin{itemize}
+\item \textbf{K/$\lambda$ Grid Search}: We evaluate all combinations of $K \in \{2, 3, 5, 7, 10\}$ and $\lambda \in \{0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0\}$ across all four datasets, yielding 180 configurations with 30 replicates each.
+
+\item \textbf{Challenging Scenarios}: We construct synthetic datasets designed to stress-test stability methods under adverse conditions: very low sample size ($n=50$), low $n$ with high $p$ ($n=200$, $p=50$), very high dimensionality ($p=100$, $n=500$), correlated features ($\rho \in \{0.5, 0.9\}$), and label noise (10\%, 20\%, 40\%).
+
+\item \textbf{Sample Size Scaling}: Using California Housing, we vary the training set fraction from 10\% to 100\% to characterize how BCR's benefits scale with data availability.
+\end{itemize}
+
 \subsection{Evaluation Metrics}
 
 \textbf{Predictive performance}: We report test RMSE for regression tasks and classification accuracy for binary tasks.
@@ -341,19 +353,77 @@ Table~\ref{tab:classification} presents detailed stability metrics for classific
 
 BCR reduces instability at all levels of the prediction pipeline. The any-flip rate (fraction of samples with any label disagreement across fits) drops from 4.7\% to 3.8\%, a 19\% relative reduction. While the absolute flip rates are already low for this well-specified classification task, BCR achieves larger reductions at the logit level (32\%), suggesting greater benefits for downstream tasks sensitive to probability calibration.
 
-\subsection{Ablation: Challenging Conditions}
+\subsection{Hyperparameter Sensitivity: K and $\lambda$}
 
-Table~\ref{tab:ablation} presents results on challenging synthetic datasets designed to stress-test stability methods.
+Table~\ref{tab:k_sensitivity} shows how stability improves with the number of shadow models $K$ at fixed $\lambda=0.05$.
 
 \begin{table}[t]
 \centering
-\caption{Ablation study on challenging datasets. $\Delta$ Stability shows BCR improvement over baseline.}
-\label{tab:ablation}
+\caption{Stability RMSE as a function of K (at $\lambda=0.05$). Stability improves monotonically with K, with diminishing returns beyond K=5.}
+\label{tab:k_sensitivity}
 \small
-\input{../tabs/ablation_study.tex}
+\input{../tabs/comprehensive/k_sensitivity.tex}
 \end{table}
 
-BCR's effectiveness varies substantially across conditions. The benefits are largest for underdetermined problems (low $n$, high $p$: 66\% reduction) and overcapacity settings (56\% reduction), precisely where refit variance is most problematic. However, BCR provides only modest improvement under label noise (6\% reduction), suggesting that label noise creates irreducible variance that regularization cannot address. Correlated features show intermediate benefits (27\% reduction).
+Key findings from the comprehensive K/$\lambda$ grid search:
+
+\begin{itemize}
+\item \textbf{Stability improves monotonically with K}: Across all datasets, increasing K reduces stability RMSE, though with diminishing returns. Moving from K=2 to K=3 provides substantial improvement (15--25\%), while K=7 to K=10 provides only marginal gains (5--10\%).
+
+\item \textbf{Optimal $\lambda$ depends on dataset}: For classification tasks (Adult, German), $\lambda \in [0.01, 0.1]$ provides good stability-accuracy trade-offs. For regression, higher $\lambda$ values (0.2--1.0) may be acceptable if accuracy loss is tolerable.
+
+\item \textbf{Recommended defaults}: $K=3$ and $\lambda=0.05$ provide a robust starting point across tasks. For applications prioritizing stability over accuracy, $K=5$ and $\lambda=0.1$ may be preferred.
+\end{itemize}
+
+Table~\ref{tab:k_lambda_summary} summarizes the best configurations found for each dataset.
+
+\begin{table}[t]
+\centering
+\caption{Best K/$\lambda$ configurations per dataset. ``vs Baseline'' shows stability improvement relative to K=2, $\lambda=0$.}
+\label{tab:k_lambda_summary}
+\small
+\input{../tabs/comprehensive/k_lambda_summary.tex}
+\end{table}
+
+\subsection{When Does BCR Help Most?}
+
+Table~\ref{tab:challenging} presents comprehensive results across challenging scenarios designed to identify where BCR provides the largest benefits.
+
+\begin{table}[t]
+\centering
+\caption{BCR performance across challenging scenarios. Stability improvement shows percentage reduction in stability RMSE compared to baseline ERM.}
+\label{tab:challenging}
+\small
+\input{../tabs/comprehensive/challenging_scenarios.tex}
+\end{table}
+
+The results reveal clear patterns:
+
+\begin{itemize}
+\item \textbf{Low sample size}: BCR provides the largest benefits when $n$ is small. With $n=50$, BCR achieves 46\% stability improvement; with $n=200$, improvement reaches 62--65\%. These are precisely the settings where bootstrap variance is largest and regularization is most valuable.
+
+\item \textbf{High dimensionality}: When $p$ is large relative to $n$ (the underdetermined regime), BCR excels. With $n=500$ and $p=100$, BCR achieves 55\% improvement. The combination of low $n$ and high $p$ yields the largest gains (65\%).
+
+\item \textbf{Label noise}: BCR remains effective under label noise, achieving 24--38\% improvement across noise levels from 10\% to 40\%. Interestingly, improvement \emph{increases} with noise level (38\% at 40\% noise vs.\ 24\% at 10\% noise), suggesting BCR helps models find stable solutions even when the signal-to-noise ratio is low.
+
+\item \textbf{Correlated features}: BCR provides 14--31\% improvement under feature correlation ($\rho=0.5$ to $0.9$). Higher correlation reduces the benefit, possibly because correlated features create redundancy that already stabilizes predictions somewhat.
+\end{itemize}
+
+\subsection{Sample Size Scaling}
+
+Table~\ref{tab:scaling} shows how BCR's benefit scales with training set size on California Housing.
+
+\begin{table}[t]
+\centering
+\caption{Sample size scaling on California Housing. BCR's stability benefit decreases as sample size increases.}
+\label{tab:scaling}
+\small
+\input{../tabs/comprehensive/sample_scaling.tex}
+\end{table}
+
+The benefit of BCR scales inversely with sample size: at $n=1{,}548$ (10\% of data), BCR achieves 33\% stability improvement; at $n=15{,}480$ (full data), improvement drops to 20\%. This pattern is expected---larger samples provide more information, reducing the variance that BCR targets. However, even at full sample size, BCR still provides meaningful stability gains (20\%), suggesting value across the data size spectrum.
+
+The RMSE cost of BCR is modest: approximately 1--2\% RMSE increase across all sample sizes. This trade-off may be acceptable in applications where prediction stability is valued.
 
 \section{Related Work}
 
@@ -441,7 +511,13 @@ All stability estimates in Table~\ref{tab:main_results} include bootstrap standa
 
 \subsection{When BCR Helps Most}
 
-Our ablation studies (Table~\ref{tab:ablation}) suggest BCR provides the largest benefits in high-variance settings caused by model specification issues: underdetermined problems (66\% reduction) and overcapacity (56\% reduction). However, BCR provides minimal benefit under label noise (6\% reduction), indicating that variance caused by irreducible noise in the labels cannot be addressed through regularization.
+Our comprehensive experiments (Tables~\ref{tab:challenging}--\ref{tab:scaling}) characterize when BCR provides the largest benefits:
+
+\begin{itemize}
+\item \textbf{Low $n$, high $p$}: BCR excels in underdetermined settings (45--65\% improvement), precisely where bootstrap variance is most problematic.
+\item \textbf{Label noise}: Contrary to our initial ablation (which tested a limited noise configuration), comprehensive experiments show BCR remains effective under 10--40\% label noise (24--38\% improvement).
+\item \textbf{Small samples}: Benefits scale inversely with sample size (33\% at $n=1.5$k $\rightarrow$ 20\% at $n=15$k), but remain meaningful even at large $n$.
+\end{itemize}
 
 More broadly, our main results show that BCR's relative advantage is dataset-dependent:
 \begin{itemize}
@@ -451,17 +527,31 @@ More broadly, our main results show that BCR's relative advantage is dataset-dep
 
 Practitioners should consider: (1) whether variance is primarily reducible (model uncertainty) or irreducible (target noise), (2) whether logit-level stability or probability/label stability is the priority, and (3) computational constraints.
 
+\subsection{Hyperparameter Recommendations}
+
+Based on our comprehensive experiments, we offer the following guidance:
+
+\begin{itemize}
+\item \textbf{Number of models ($K$)}: Start with $K=3$ as the default. Increase to $K=5$ for applications prioritizing stability, but expect diminishing returns beyond $K=5$. Memory constraints may limit $K$ for large models.
+
+\item \textbf{Regularization strength ($\lambda$)}: Start with $\lambda=0.05$. For classification tasks where accuracy is paramount, consider $\lambda=0.01$--$0.02$. For applications prioritizing stability over accuracy, $\lambda=0.1$--$0.2$ may be appropriate.
+
+\item \textbf{When to use BCR}: BCR is most valuable when (1) sample size is small relative to model capacity, (2) dimensionality is high, (3) prediction stability is operationally important, or (4) bootstrap-based inference (confidence intervals, hypothesis tests) will be performed.
+
+\item \textbf{When simpler methods suffice}: For large datasets with clean labels and low-dimensional features, standard bagging or weight decay may provide comparable stability with simpler implementation.
+\end{itemize}
+
 \section{Conclusion}
 
-We have presented bootstrap-consistency regularization (BCR), a training procedure that directly minimizes prediction instability under data resampling. Our key contributions include: (1) clearly defining bootstrap prediction instability as the target estimand, (2) a tractable training algorithm using Poisson-weighted losses to simulate bootstrap perturbations, (3) first-order sensitivity analysis justifying why direct variance penalties target the right quantity, and (4) empirical evaluation demonstrating 22--50\% reductions in instability across four datasets.
+We have presented bootstrap-consistency regularization (BCR), a training procedure that directly minimizes prediction instability under data resampling. Our key contributions include: (1) clearly defining bootstrap prediction instability as the target estimand, (2) a tractable training algorithm using Poisson-weighted losses to simulate bootstrap perturbations, (3) first-order sensitivity analysis justifying why direct variance penalties target the right quantity, and (4) comprehensive empirical evaluation demonstrating 22--65\% reductions in instability across diverse settings.
 
-The main question we address is: \emph{does the stochastic training surrogate actually reduce full-retraining instability?} Our experiments confirm that it does, though effectiveness varies by dataset and problem structure. BCR excels on classification tasks and high-variance settings (underdetermined problems, overcapacity), while simpler methods like bagging or weight decay may suffice for some regression tasks or when label noise is present.
+The main question we address is: \emph{does the stochastic training surrogate actually reduce full-retraining instability?} Our experiments confirm that it does, with comprehensive experiments (5,910 training runs) characterizing when BCR helps most. BCR excels in low-sample, high-dimensional settings (45--65\% improvement), remains effective under label noise (24--38\% improvement), and provides meaningful benefits even at large sample sizes (20\% improvement at $n=15$k). The benefit scales inversely with sample size, suggesting BCR is most valuable precisely when data is scarce and variance is highest.
 
 The key insight is that stability under data resampling benefits from directly penalizing prediction disagreement across bootstrap perturbations on \emph{identical inputs}, rather than relying on indirect proxies. Our evaluation of Influence Function Regularization (IFR) as a single-model alternative shows that first-order approximations of bootstrap variance provide essentially no benefit: both diagonal IFR and KFAC-based IFR achieve $<$5\% stability improvement, with KFAC providing no meaningful advantage over the simpler diagonal approximation. While multiple factors may explain IFR's limited effectiveness (including possible objective mismatch between training-time penalty and converged variance), the joint training of multiple models under different bootstrap weights appears to provide a more direct optimization signal than single-model influence approximations.
 
 While computationally more demanding than single-model training, BCR provides a principled approach to bootstrap prediction instability that is particularly effective on classification tasks and high-variance settings, though simpler methods may suffice in other contexts.
 
-Future research directions include improving single-model approximations through higher-order influence expansions or learned curvature models, establishing theoretical guarantees for the mini-batch Poisson approximation, extending to other architectures (transformers, CNNs), combining BCR with other regularization techniques, and conducting comprehensive hyperparameter sensitivity analysis (varying $K$, batch size, and network architecture) to understand when BCR provides the largest benefits.
+Future research directions include improving single-model approximations through higher-order influence expansions or learned curvature models, establishing theoretical guarantees for the mini-batch Poisson approximation, extending to other architectures (transformers, CNNs), and combining BCR with other regularization techniques.
 
 
 

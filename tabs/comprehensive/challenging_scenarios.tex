@@ -1,0 +1,20 @@
+% Challenging Scenarios Results
+% BCR stability improvement across different data conditions
+\begin{tabular}{lrrrr}
+\toprule
+Scenario & Baseline Stab. & BCR Stab. & Improvement & RMSE Change \\
+\midrule
+Very low $n$ (50) & 0.249 & 0.135 & \textbf{46\%} & +0.1\% \\
+Low $n$ (200) & 1.646 & 0.627 & \textbf{62\%} & +0.5\% \\
+Low $n$, high $p$ & 1.571 & 0.557 & \textbf{65\%} & +0.5\% \\
+Very high $p$ (100) & 13.10 & 5.94 & \textbf{55\%} & +6.2\% \\
+Moderate $n$ (1000) & 17.97 & 13.27 & 26\% & +16.5\% \\
+\midrule
+Mild correlation ($\rho$=0.5) & 0.506 & 0.351 & 31\% & $-$0.2\% \\
+Strong correlation ($\rho$=0.9) & 0.316 & 0.270 & 14\% & $-$0.1\% \\
+\midrule
+10\% label noise & 13.62 & 10.35 & 24\% & +0.9\% \\
+20\% label noise & 16.96 & 12.82 & 24\% & +2.7\% \\
+40\% label noise & 16.64 & 10.26 & \textbf{38\%} & +0.8\% \\
+\bottomrule
+\end{tabular}

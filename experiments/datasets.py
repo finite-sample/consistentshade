@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from torch.utils.data import TensorDataset
 
-from .utils import set_seed
+from bcr import set_seed
 
 
 def prepare_synthetic_regression(

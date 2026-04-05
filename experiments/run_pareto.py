@@ -2,18 +2,18 @@
 """Generate Pareto frontier plots for BCR lambda sweep."""
 
 import os
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from bcr import stability_rmse, train_baseline_regression, train_bcr_regression
 
-from scripts.config import FIGS_DIR, TABS_DIR
-from scripts.datasets import prepare_california_housing, prepare_synthetic_regression
-from scripts.metrics import stability_rmse
-from scripts.trainers import train_baseline_regression, train_bcr_regression
+from .datasets import prepare_california_housing, prepare_synthetic_regression
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TABS_DIR = os.path.join(BASE_DIR, "tabs")
+FIGS_DIR = os.path.join(BASE_DIR, "figs")
 
 
 def pareto_sweep(train_ds, test_x, test_y, d_in, R=10):

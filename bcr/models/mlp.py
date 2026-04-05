@@ -1,4 +1,4 @@
-"""Neural network model definitions."""
+"""MLP model definitions."""
 
 import torch.nn as nn
 

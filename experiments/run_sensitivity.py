@@ -12,18 +12,22 @@ Uses R=30 replicates for each configuration.
 """
 
 import os
-import sys
 from itertools import product
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from bcr import (
+    EXPERIMENT_CONFIG,
+    comprehensive_stability_metrics,
+    train_bcr_classification,
+    train_bcr_regression,
+)
 
-from scripts.config import EXPERIMENT_CONFIG, TABS_DIR
-from scripts.datasets import prepare_adult_income, prepare_synthetic_regression
-from scripts.metrics import comprehensive_stability_metrics
-from scripts.trainers import train_bcr_classification, train_bcr_regression
+from .datasets import prepare_adult_income, prepare_synthetic_regression
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TABS_DIR = os.path.join(BASE_DIR, "tabs")
 
 
 def run_sensitivity_experiment(
@@ -53,7 +57,7 @@ def run_sensitivity_experiment(
         metrics_list = []
 
         for r in range(R):
-            seed = EXPERIMENT_CONFIG["base_seed"] + r
+            seed = EXPERIMENT_CONFIG.base_seed + r
 
             if is_classification:
                 pred, metric = train_bcr_classification(
@@ -99,7 +103,7 @@ def run_sensitivity_experiment(
 
 
 def main():
-    R = EXPERIMENT_CONFIG["n_replicates"]
+    R = EXPERIMENT_CONFIG.n_replicates
     lam = 0.05
 
     K_values = [2, 3, 5, 7]
@@ -139,7 +143,6 @@ def main():
         lam=lam,
     )
 
-    # Save results
     sensitivity_dir = os.path.join(TABS_DIR, "sensitivity")
     os.makedirs(sensitivity_dir, exist_ok=True)
 
@@ -148,7 +151,6 @@ def main():
 
     print(f"\nSensitivity results saved to {sensitivity_dir}/")
 
-    # Print summary tables
     print("\n" + "=" * 80)
     print("SENSITIVITY ANALYSIS SUMMARY")
     print("=" * 80)

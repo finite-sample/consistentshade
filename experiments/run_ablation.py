@@ -2,27 +2,28 @@
 """Run ablation studies on challenging datasets."""
 
 import os
-import sys
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from scripts.config import EXPERIMENT_CONFIG, TABS_DIR
-from scripts.datasets import create_challenging_datasets
-from scripts.metrics import stability_rmse
-from scripts.trainers import (
+from bcr import (
+    EXPERIMENT_CONFIG,
+    stability_rmse,
     train_baseline_regression,
     train_bcr_regression,
     train_ifr_regression,
 )
 
+from .datasets import create_challenging_datasets
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TABS_DIR = os.path.join(BASE_DIR, "tabs")
+
 
 def main():
     os.makedirs(TABS_DIR, exist_ok=True)
 
-    R = EXPERIMENT_CONFIG["n_replicates"]
+    R = EXPERIMENT_CONFIG.n_replicates
 
     print("Creating challenging datasets...")
     challenging = create_challenging_datasets()
@@ -40,7 +41,7 @@ def main():
         ifr_rmse_list = []
 
         for r in range(R):
-            seed = EXPERIMENT_CONFIG["base_seed"] + r
+            seed = EXPERIMENT_CONFIG.base_seed + r
             print(f"  Replicate {r + 1}/{R}", end="\r")
 
             bp, br = train_baseline_regression(
